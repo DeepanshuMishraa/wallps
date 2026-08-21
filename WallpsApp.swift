@@ -2,8 +2,11 @@ import AppKit
 import SwiftUI
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var attachAttempts = 0
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         MenuBarManager.shared.install()
+        attachWindowDelegate()
         let event = NSAppleEventManager.shared().currentAppleEvent
         if event == nil || event?.eventID != AEEventID(kAEOpenApplication) {
             NSApp.hide(nil)
@@ -12,6 +15,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         WallpaperSwitcher.shared.restoreDesktopImage()
+    }
+
+    private func attachWindowDelegate() {
+        guard attachAttempts < 15 else { return }
+        attachAttempts += 1
+        MenuBarManager.shared.attachToMainWindowIfNeeded()
+        guard MenuBarManager.shared.mainWindow == nil else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+            self?.attachWindowDelegate()
+        }
     }
 }
 

@@ -70,7 +70,7 @@ struct ContentView: View {
             autoReapplySavedChoices()
         }
         .onReceive(NotificationCenter.default.publisher(for: .openMainWindow)) { _ in
-            showMainWindow()
+            MenuBarManager.shared.showMainWindow()
         }
         .alert(item: $alert) { alert in
             Alert(
@@ -151,27 +151,9 @@ struct ContentView: View {
         }
         .padding(22)
         .onAppear {
-            attachWindowDelegate()
+            MenuBarManager.shared.attachToMainWindowIfNeeded()
             autoReapplySavedChoices()
         }
-    }
-
-    private func attachWindowDelegate() {
-        DispatchQueue.main.async {
-            guard let window = NSApp.windows.first(where: { $0.delegate == nil && !($0 is NSPanel) }) else {
-                return
-            }
-            window.delegate = MenuBarManager.shared.windowDelegate
-            MenuBarManager.shared.mainWindow = window
-        }
-    }
-
-    private func showMainWindow() {
-        NSApp.setActivationPolicy(.regular)
-        if let window = MenuBarManager.shared.mainWindow ?? NSApp.windows.first {
-            window.makeKeyAndOrderFront(nil)
-        }
-        NSApp.activate(ignoringOtherApps: true)
     }
 
     private func autoReapplySavedChoices() {
