@@ -108,8 +108,13 @@ struct ContentView: View {
     private var header: some View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 3) {
-                Text("Wallps")
-                    .font(.system(size: 17, weight: .bold))
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("Wallps")
+                        .font(.system(size: 17, weight: .bold))
+                    Text("v\(appVersion)")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
                 Text("Separate wallpapers for your desktop and lock screen.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -121,6 +126,10 @@ struct ContentView: View {
         }
         .padding(.horizontal, 22)
         .padding(.vertical, 16)
+    }
+
+    private var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
     }
 
     private var content: some View {

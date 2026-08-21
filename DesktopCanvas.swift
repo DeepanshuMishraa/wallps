@@ -1,5 +1,35 @@
 import AppKit
 
+private final class CoverImageView: NSView {
+    var image: NSImage? {
+        didSet { needsDisplay = true }
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.black.setFill()
+        bounds.fill()
+        guard let image, image.size.width > 0, image.size.height > 0 else { return }
+
+        let scale = max(bounds.width / image.size.width, bounds.height / image.size.height)
+        let width = image.size.width * scale
+        let height = image.size.height * scale
+        let destination = NSRect(
+            x: (bounds.width - width) / 2,
+            y: (bounds.height - height) / 2,
+            width: width,
+            height: height
+        )
+        image.draw(
+            in: destination,
+            from: .zero,
+            operation: .sourceOver,
+            fraction: 1,
+            respectFlipped: false,
+            hints: [.interpolation: NSImageInterpolation.high.rawValue]
+        )
+    }
+}
+
 final class DesktopCanvas {
     static let windowIdentifier = "WallpsCanvas"
 
@@ -52,8 +82,8 @@ final class DesktopCanvas {
                 if existing.frame != screen.frame {
                     existing.setFrame(screen.frame, display: false)
                 }
-                if let imageView = existing.contentView as? NSImageView, imageView.image !== image {
-                    imageView.image = image
+                if let coverView = existing.contentView as? CoverImageView, coverView.image !== image {
+                    coverView.image = image
                 }
             } else {
                 let window = makeWindow(screen: screen, image: image)
@@ -83,10 +113,9 @@ final class DesktopCanvas {
         window.ignoresMouseEvents = true
         window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
         window.animationBehavior = .none
-        let imageView = NSImageView(frame: NSRect(origin: .zero, size: screen.frame.size))
-        imageView.image = image
-        imageView.imageScaling = .scaleProportionallyUpOrDown
-        window.contentView = imageView
+        let coverView = CoverImageView(frame: NSRect(origin: .zero, size: screen.frame.size))
+        coverView.image = image
+        window.contentView = coverView
         return window
     }
 
