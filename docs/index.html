@@ -3,66 +3,148 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Wallps — different wallpapers for desktop and lock screen</title>
-  <meta name="description" content="Different wallpapers for desktop and lock screen on macOS 13+.">
+  <title>Wallps — different wallpapers for desktop &amp; lock screen</title>
+  <meta name="description" content="Different wallpapers for desktop and lock screen on macOS 13+. Free and open source.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect x='8' y='8' width='84' height='84' rx='22' fill='%23fafafa'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
-    :root { color-scheme: light dark; }
+    :root { color-scheme: dark; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
+
     body {
       min-height: 100svh;
       display: grid;
       place-items: center;
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
-      background: #fafafa;
-      color: #1d1d1f;
+      overflow: hidden;
+      background: #09090b;
+      color: #fafafa;
+      font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
       -webkit-font-smoothing: antialiased;
     }
-    @media (prefers-color-scheme: dark) {
-      body { background: #0d0d10; color: #f5f5f7; }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(640px 320px at 50% -8%, rgba(255, 255, 255, 0.09), transparent 70%),
+        radial-gradient(circle at center, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+      background-size: auto, 26px 26px;
+      mask-image: radial-gradient(720px 480px at 50% 38%, black 30%, transparent 100%);
+      -webkit-mask-image: radial-gradient(720px 480px at 50% 38%, black 30%, transparent 100%);
     }
-    main { text-align: center; padding: 32px; }
+
+    main {
+      position: relative;
+      text-align: center;
+      padding: 48px 24px;
+    }
+
+    main > * {
+      opacity: 0;
+      animation: rise 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    main > *:nth-child(1) { animation-delay: 0.05s; }
+    main > *:nth-child(2) { animation-delay: 0.15s; }
+    main > *:nth-child(3) { animation-delay: 0.25s; }
+    main > *:nth-child(4) { animation-delay: 0.35s; }
+
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.24em;
+      color: #71717a;
+    }
+    .status::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #34d399;
+    }
+
     h1 {
-      font-size: clamp(34px, 6vw, 52px);
-      font-weight: 700;
-      letter-spacing: -0.03em;
+      margin-top: 26px;
+      font-size: clamp(29px, 5.2vw, 50px);
+      font-weight: 500;
+      letter-spacing: -0.04em;
+      line-height: 1.18;
     }
-    p {
-      margin-top: 12px;
-      font-size: 17px;
-      color: #86868b;
+    h1 .dim { color: #52525b; }
+
+    .sub {
+      margin-top: 20px;
+      font-size: 14px;
+      line-height: 1.75;
+      color: #a1a1aa;
     }
+
     .button {
-      display: inline-block;
-      margin-top: 36px;
-      padding: 14px 34px;
+      display: inline-flex;
+      align-items: center;
+      gap: 11px;
+      margin-top: 40px;
+      padding: 14px 28px;
       border-radius: 999px;
-      background: #0071e3;
-      color: #fff;
+      background: #fafafa;
+      color: #09090b;
       text-decoration: none;
-      font-weight: 600;
-      font-size: 16px;
-      transition: transform 150ms ease, box-shadow 150ms ease, background 150ms ease;
+      font-size: 14px;
+      font-weight: 500;
+      letter-spacing: -0.01em;
+      transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1),
+                  box-shadow 200ms cubic-bezier(0.16, 1, 0.3, 1);
     }
     .button:hover {
-      background: #0077ed;
       transform: translateY(-2px);
-      box-shadow: 0 12px 28px rgba(0, 113, 227, 0.35);
+      box-shadow: 0 10px 34px rgba(255, 255, 255, 0.16);
     }
-    .button:active { transform: translateY(0); }
+    .button:active { transform: translateY(0); box-shadow: none; }
+    .button svg { width: 15px; height: 15px; fill: currentColor; flex: none; }
+
     .meta {
-      margin-top: 24px;
-      font-size: 13px;
-      color: #86868b;
+      margin-top: 30px;
+      font-size: 12px;
+      color: #71717a;
     }
-    .meta a { color: inherit; }
+    .meta a {
+      color: inherit;
+      text-decoration: none;
+      border-bottom: 1px solid #3f3f46;
+      padding-bottom: 1px;
+      transition: color 150ms ease, border-color 150ms ease;
+    }
+    .meta a:hover { color: #fafafa; border-color: #fafafa; }
+
+    @media (prefers-reduced-motion: reduce) {
+      main > * { animation: none; opacity: 1; }
+      .button { transition: none; }
+    }
+
+    ::selection { background: rgba(255, 255, 255, 0.18); }
   </style>
 </head>
 <body>
   <main>
-    <h1>Wallps</h1>
-    <p>Different wallpapers for your desktop and lock screen.</p>
-    <a class="button" href="https://wallps-download.d4deepanshu723.workers.dev/Wallps-1.0.1-macos.dmg">Download for macOS</a>
-    <p class="meta">macOS 13+ &middot; Free &amp; open source &middot; <a href="https://github.com/DeepanshuMishraa/wallps">GitHub</a></p>
+    <p class="status">WALLPS&nbsp;&nbsp;/&nbsp;&nbsp;FOR MACOS</p>
+    <h1>Different wallpapers<br>for desktop <span class="dim">&amp;</span> lock screen.</h1>
+    <p class="sub">Pick two images. Wallps keeps them apart —<br>zero flash, every time you lock.</p>
+    <a class="button" href="https://wallps-download.d4deepanshu723.workers.dev/Wallps-1.0.1-macos.dmg">
+      <svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" viewBox="0 0 814 1000"><path d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76.5 0-103.7 40.8-165.9 40.8s-105.6-57-155.5-127C46.7 790.7 0 663 0 541.8c0-194.4 126.4-297.5 250.8-297.5 66.1 0 121.2 43.4 162.7 43.4 39.5 0 101.1-46 176.3-46 28.5 0 130.9 2.6 198.3 99.2zm-234-181.5c31.1-36.9 53.1-88.1 53.1-139.3 0-7.1-.6-14.3-1.9-20.1-50.6 1.9-110.8 33.7-147.1 75.8-28.5 32.4-55.1 83.6-55.1 135.5 0 7.8 1.3 15.6 1.9 18.1 3.2.6 8.4 1.3 13.6 1.3 45.4 0 102.5-30.4 135.5-71.3z"/></svg>
+      Download for macOS
+    </a>
+    <p class="meta">macOS 13+ &middot; Free &middot; Open source &middot; <a href="https://github.com/DeepanshuMishraa/wallps">GitHub</a></p>
   </main>
 </body>
 </html>
