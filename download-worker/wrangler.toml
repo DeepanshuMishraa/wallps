@@ -1,0 +1,7 @@
+name = "wallps-download"
+main = "index.js"
+compatibility_date = "2026-08-21"
+
+[[r2_buckets]]
+binding = "WALLPS"
+bucket_name = "wallps"
