@@ -12,6 +12,7 @@ saver, logout) and swaps your **desktop image** back the moment you unlock.
 - Desktop and lock screen images set independently
 - macOS 13 through macOS 26 (Tahoe)
 - Automatic, event-driven swapping — nothing to configure after setup
+- Menu bar control: see both file names, Set / Refresh, toggle Login Item, open or quit
 - Optional *Launch at login*: starts hidden, swap stays armed after every reboot
 - Multi-display support, drag & drop image selection
 
@@ -45,6 +46,8 @@ after reboots. Lock your Mac with `⌃⌘Q` to see it in action.
 
 ## Notes
 
+- Turn on **Launch at login** — it's required for automatic switching after reboots. Without it, open Wallps after every restart.
+- Closing the window hides Wallps to the menu bar, where it keeps swapping; use **Quit** in the menu to fully stop it.
 - The swap runs while Wallps is running. Quit it and the lock screen mirrors the desktop again; reopen it and your choices are re-applied automatically.
 - On macOS 13–25 Wallps also installs the legacy login image (one admin prompt) so the boot/login window honors it. macOS 26 renders the lock screen live from the desktop wallpaper, which is what the swap approach is built around.
 - With FileVault, the pre-boot unlock screen cannot be customized — no app can reach it.

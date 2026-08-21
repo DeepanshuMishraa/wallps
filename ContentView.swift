@@ -65,6 +65,13 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .setWallpapers)) { _ in
             applyWallpapers()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .refreshWallpaperPreviews)) { _ in
+            didAutoReapply = false
+            autoReapplySavedChoices()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openMainWindow)) { _ in
+            showMainWindow()
+        }
         .alert(item: $alert) { alert in
             Alert(
                 title: Text(alert.title),
@@ -143,7 +150,28 @@ struct ContentView: View {
             }
         }
         .padding(22)
-        .onAppear { autoReapplySavedChoices() }
+        .onAppear {
+            attachWindowDelegate()
+            autoReapplySavedChoices()
+        }
+    }
+
+    private func attachWindowDelegate() {
+        DispatchQueue.main.async {
+            guard let window = NSApp.windows.first(where: { $0.delegate == nil && !($0 is NSPanel) }) else {
+                return
+            }
+            window.delegate = MenuBarManager.shared.windowDelegate
+            MenuBarManager.shared.mainWindow = window
+        }
+    }
+
+    private func showMainWindow() {
+        NSApp.setActivationPolicy(.regular)
+        if let window = MenuBarManager.shared.mainWindow ?? NSApp.windows.first {
+            window.makeKeyAndOrderFront(nil)
+        }
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     private func autoReapplySavedChoices() {
@@ -268,7 +296,7 @@ private struct WallpaperCardView: View {
     let onPick: () -> Void
     let onAcceptImage: (URL) -> Void
 
-    @State private var previewImage: NSImage?
+    @State private var cacheGeneration = 0
     @State private var hovering = false
     @State private var dropping = false
 
@@ -276,8 +304,8 @@ private struct WallpaperCardView: View {
         ZStack {
             RoundedRectangle(cornerRadius: 12)
                 .fill(Color(nsColor: .controlBackgroundColor))
-            if let previewImage {
-                Image(nsImage: previewImage)
+            if let url, let image = WallpaperImageStore.cachedImage(for: url) {
+                Image(nsImage: image)
                     .resizable()
                     .scaledToFill()
                     .transition(.opacity)
@@ -328,8 +356,16 @@ private struct WallpaperCardView: View {
             }
             return true
         }
-        .onAppear { loadImage() }
-        .onChange(of: url) { _ in loadImage() }
+        .task(id: url) {
+            guard let url else { return }
+            WallpaperImageStore.load(url) { image in
+                if image != nil {
+                    DispatchQueue.main.async {
+                        cacheGeneration += 1
+                    }
+                }
+            }
+        }
     }
 
     private var bottomBar: some View {
@@ -362,24 +398,6 @@ private struct WallpaperCardView: View {
         .padding(.horizontal, 12)
         .padding(.bottom, 10)
         .frame(maxHeight: .infinity, alignment: .bottom)
-    }
-
-    private func loadImage() {
-        previewImage = nil
-        guard let url else { return }
-        if let cached = WallpaperImageStore.cachedImage(for: url) {
-            withAnimation(.easeOut(duration: 0.25)) {
-                previewImage = cached
-            }
-            return
-        }
-        WallpaperImageStore.load(url) { image in
-            if let image {
-                withAnimation(.easeOut(duration: 0.25)) {
-                    previewImage = image
-                }
-            }
-        }
     }
 }
 
