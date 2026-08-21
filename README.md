@@ -10,7 +10,7 @@ saver, logout) and swaps your **desktop image** back the moment you unlock.
 ## Features
 
 - Desktop and lock screen images set independently
-- macOS 13 through macOS 26 (Tahoe)
+- macOS 13+
 - Automatic, event-driven swapping — nothing to configure after setup
 - Menu bar control: see both file names, Set / Refresh, toggle Login Item, open or quit
 - Optional *Launch at login*: starts hidden, swap stays armed after every reboot
