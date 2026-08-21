@@ -12,6 +12,7 @@ final class WallpaperSwitcher {
     private var loginImageURL: URL?
     private var showingLoginImage = false
     private var observers: [NSObjectProtocol] = []
+    private var workspaceObservers: [NSObjectProtocol] = []
 
     private init() {
         if let path = defaults.string(forKey: "WallpsDesktopImagePath") {
@@ -42,23 +43,35 @@ final class WallpaperSwitcher {
     private func register() {
         guard observers.isEmpty else { return }
         for name in [
+            "com.apple.sessionDidResignActive",
             "com.apple.screenIsLocked",
             "com.apple.screensaverDidStart",
-            "com.apple.sessionDidResignActive",
         ] {
             observe(name) { switcher in
                 switcher.showLoginImage()
             }
         }
         for name in [
+            "com.apple.sessionDidBecomeActive",
             "com.apple.screenIsUnlocked",
             "com.apple.screensaverDidStop",
-            "com.apple.sessionDidBecomeActive",
         ] {
             observe(name) { switcher in
                 switcher.showDesktopImage()
             }
         }
+
+        let center = NSWorkspace.shared.notificationCenter
+        workspaceObservers.append(
+            center.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
+                self?.showLoginImage()
+            }
+        )
+        workspaceObservers.append(
+            center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+                self?.showDesktopImage()
+            }
+        )
     }
 
     private func observe(_ name: String, action: @escaping (WallpaperSwitcher) -> Void) {
