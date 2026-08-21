@@ -31,7 +31,7 @@ Or open `Wallps.xcodeproj` in Xcode and press Run.
 ## Install
 
 Download the [latest release](https://github.com/DeepanshuMishraa/wallps/releases/latest)
-(`Wallps-1.0.0-macos.zip`), unzip, and move `Wallps.app` into `/Applications`.
+(`Wallps-1.0.0-macos.dmg`), open it, and drag `Wallps.app` into `Applications`.
 
 The app is not signed or notarized, so Gatekeeper blocks it. Approve it once:
 
