@@ -3,49 +3,66 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Wallps — separate wallpapers for your Mac</title>
-  <meta name="description" content="Different wallpapers for desktop and lock screen on macOS.">
+  <title>Wallps — different wallpapers for desktop and lock screen</title>
+  <meta name="description" content="Different wallpapers for desktop and lock screen on macOS 13+.">
   <style>
     :root { color-scheme: light dark; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      min-height: 100svh;
+      display: grid;
+      place-items: center;
       font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
-      background: #f5f5f7;
+      background: #fafafa;
       color: #1d1d1f;
+      -webkit-font-smoothing: antialiased;
     }
     @media (prefers-color-scheme: dark) {
-      body { background: #1c1c1e; color: #f5f5f7; }
+      body { background: #0d0d10; color: #f5f5f7; }
     }
-    main { text-align: center; padding: 48px 24px; }
-    h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.02em; }
-    p { margin-top: 10px; font-size: 15px; color: #6e6e73; }
+    main { text-align: center; padding: 32px; }
+    h1 {
+      font-size: clamp(34px, 6vw, 52px);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+    }
+    p {
+      margin-top: 12px;
+      font-size: 17px;
+      color: #86868b;
+    }
     .button {
       display: inline-block;
-      margin-top: 30px;
-      padding: 13px 30px;
+      margin-top: 36px;
+      padding: 14px 34px;
       border-radius: 999px;
-      background: #007aff;
+      background: #0071e3;
       color: #fff;
       text-decoration: none;
       font-weight: 600;
-      font-size: 15px;
-      transition: background 150ms ease, transform 150ms ease;
+      font-size: 16px;
+      transition: transform 150ms ease, box-shadow 150ms ease, background 150ms ease;
     }
-    .button:hover { background: #0066d6; transform: translateY(-1px); }
-    .meta { margin-top: 20px; font-size: 12px; color: #86868b; }
+    .button:hover {
+      background: #0077ed;
+      transform: translateY(-2px);
+      box-shadow: 0 12px 28px rgba(0, 113, 227, 0.35);
+    }
+    .button:active { transform: translateY(0); }
+    .meta {
+      margin-top: 24px;
+      font-size: 13px;
+      color: #86868b;
+    }
     .meta a { color: inherit; }
   </style>
 </head>
 <body>
   <main>
     <h1>Wallps</h1>
-    <p>Different wallpapers for desktop and lock screen.</p>
+    <p>Different wallpapers for your desktop and lock screen.</p>
     <a class="button" href="https://wallps-download.d4deepanshu723.workers.dev/Wallps-1.0.1-macos.dmg">Download for macOS</a>
-    <p class="meta">macOS 13+ &middot; Free &middot; <a href="https://github.com/DeepanshuMishraa/wallps">Open source</a></p>
+    <p class="meta">macOS 13+ &middot; Free &amp; open source &middot; <a href="https://github.com/DeepanshuMishraa/wallps">GitHub</a></p>
   </main>
 </body>
 </html>
