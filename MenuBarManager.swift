@@ -23,7 +23,7 @@ final class MenuBarManager: NSObject, NSMenuDelegate {
     func attachToMainWindowIfNeeded() {
         guard mainWindow == nil else { return }
         DispatchQueue.main.async {
-            guard let window = NSApp.windows.first(where: { !($0 is NSPanel) && $0.contentView != nil }) else {
+            guard let window = NSApp.windows.first(where: Self.isContentWindow) else {
                 return
             }
             window.delegate = self.windowDelegate
@@ -34,11 +34,29 @@ final class MenuBarManager: NSObject, NSMenuDelegate {
     func showMainWindow() {
         NSApp.setActivationPolicy(.regular)
         NSApp.unhide(nil)
-        if let window = mainWindow ?? NSApp.windows.first(where: { !($0 is NSPanel) && $0.contentView != nil }) {
+        if let window = mainWindow ?? NSApp.windows.first(where: Self.isContentWindow) {
             window.makeKeyAndOrderFront(nil)
             mainWindow = window
         }
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func hideMainWindowQuietly() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+            guard let self else { return }
+            self.attachToMainWindowIfNeeded()
+            if let window = self.mainWindow ?? NSApp.windows.first(where: Self.isContentWindow) {
+                window.orderOut(nil)
+                self.mainWindow = window
+            }
+            NSApp.setActivationPolicy(.accessory)
+        }
+    }
+
+    static func isContentWindow(_ window: NSWindow) -> Bool {
+        !window.isKind(of: NSPanel.self)
+            && window.contentView != nil
+            && window.identifier?.rawValue != DesktopCanvas.windowIdentifier
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {

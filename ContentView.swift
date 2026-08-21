@@ -184,7 +184,7 @@ struct ContentView: View {
             statusMessage = "Reapplying your wallpapers…"
             statusIsError = false
             do {
-                statusMessage = try await WallpaperService.apply(desktop: savedDesktop, login: savedLogin, legacyInstall: false)
+                statusMessage = try await WallpaperService.apply(login: savedLogin, legacyInstall: false)
                 WallpaperSwitcher.shared.arm(desktop: savedDesktop, login: savedLogin)
             } catch {
                 statusMessage = "Could not reapply your saved wallpapers."
@@ -260,7 +260,7 @@ struct ContentView: View {
             statusMessage = "Applying wallpapers…"
             statusIsError = false
             do {
-                statusMessage = try await WallpaperService.apply(desktop: desktopImage, login: loginImage)
+                statusMessage = try await WallpaperService.apply(login: loginImage)
                 WallpaperSwitcher.shared.arm(desktop: desktopImage, login: loginImage)
             } catch {
                 statusMessage = "Could not apply both wallpapers."

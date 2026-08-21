@@ -9,7 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         attachWindowDelegate()
         let event = NSAppleEventManager.shared().currentAppleEvent
         if event == nil || event?.eventID != AEEventID(kAEOpenApplication) {
-            NSApp.hide(nil)
+            MenuBarManager.shared.hideMainWindowQuietly()
         }
     }
 

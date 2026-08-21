@@ -4,15 +4,14 @@ import Foundation
 final class WallpaperSwitcher {
     static let shared = WallpaperSwitcher()
 
+    let canvas = DesktopCanvas()
+
     var savedDesktopURL: URL? { desktopImageURL }
     var savedLoginURL: URL? { loginImageURL }
 
     private let defaults = UserDefaults.standard
     private var desktopImageURL: URL?
     private var loginImageURL: URL?
-    private var showingLoginImage = false
-    private var observers: [NSObjectProtocol] = []
-    private var workspaceObservers: [NSObjectProtocol] = []
 
     private init() {
         if let path = defaults.string(forKey: "WallpsDesktopImagePath") {
@@ -21,9 +20,7 @@ final class WallpaperSwitcher {
         if let path = defaults.string(forKey: "WallpsLoginImagePath") {
             loginImageURL = URL(fileURLWithPath: path)
         }
-        guard desktopImageURL != nil, loginImageURL != nil else { return }
-        register()
-        restoreDesktopImage()
+        applyState()
     }
 
     func arm(desktop: URL, login: URL) {
@@ -31,75 +28,26 @@ final class WallpaperSwitcher {
         loginImageURL = login
         defaults.set(desktop.path, forKey: "WallpsDesktopImagePath")
         defaults.set(login.path, forKey: "WallpsLoginImagePath")
-        register()
+        applyState()
+    }
+
+    func applyState() {
+        if let loginImageURL, FileManager.default.fileExists(atPath: loginImageURL.path) {
+            setSystemWallpaper(loginImageURL)
+        }
+        if let desktopImageURL, FileManager.default.fileExists(atPath: desktopImageURL.path) {
+            canvas.show(imageAt: desktopImageURL)
+        }
     }
 
     func restoreDesktopImage() {
-        guard let desktopImageURL else { return }
-        showingLoginImage = false
-        setDesktopImage(desktopImageURL)
-    }
-
-    private func register() {
-        guard observers.isEmpty else { return }
-        for name in [
-            "com.apple.sessionDidResignActive",
-            "com.apple.screenIsLocked",
-            "com.apple.screensaverDidStart",
-        ] {
-            observe(name) { switcher in
-                switcher.showLoginImage()
-            }
+        canvas.tearDown()
+        if let desktopImageURL, FileManager.default.fileExists(atPath: desktopImageURL.path) {
+            setSystemWallpaper(desktopImageURL)
         }
-        for name in [
-            "com.apple.sessionDidBecomeActive",
-            "com.apple.screenIsUnlocked",
-            "com.apple.screensaverDidStop",
-        ] {
-            observe(name) { switcher in
-                switcher.showDesktopImage()
-            }
-        }
-
-        let center = NSWorkspace.shared.notificationCenter
-        workspaceObservers.append(
-            center.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
-                self?.showLoginImage()
-            }
-        )
-        workspaceObservers.append(
-            center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
-                self?.showDesktopImage()
-            }
-        )
     }
 
-    private func observe(_ name: String, action: @escaping (WallpaperSwitcher) -> Void) {
-        observers.append(
-            DistributedNotificationCenter.default().addObserver(
-                forName: NSNotification.Name(name),
-                object: nil,
-                queue: .main
-            ) { [weak self] _ in
-                guard let self else { return }
-                action(self)
-            }
-        )
-    }
-
-    private func showLoginImage() {
-        guard !showingLoginImage, let loginImageURL else { return }
-        showingLoginImage = true
-        setDesktopImage(loginImageURL)
-    }
-
-    private func showDesktopImage() {
-        guard showingLoginImage, let desktopImageURL else { return }
-        showingLoginImage = false
-        setDesktopImage(desktopImageURL)
-    }
-
-    private func setDesktopImage(_ url: URL) {
+    private func setSystemWallpaper(_ url: URL) {
         var options: [NSWorkspace.DesktopImageOptionKey: Any] = [:]
         options[.imageScaling] = NSImageScaling.scaleProportionallyUpOrDown.rawValue
         options[.allowClipping] = true

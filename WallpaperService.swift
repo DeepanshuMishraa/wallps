@@ -8,15 +8,15 @@ enum WallpaperService {
         let message: String
     }
 
-    static func apply(desktop: URL, login: URL, legacyInstall: Bool = true) async throws -> String {
-        try setDesktopWallpapers(desktop)
+    static func apply(login: URL, legacyInstall: Bool = true) async throws -> String {
+        try setSystemWallpaper(login)
 
         let major = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
         if major < 26 && legacyInstall {
             try installLegacyLoginImage(login)
-            return "Wallpapers set. Log out or restart to see the login screen."
+            return "Wallpapers set. Log out or restart to see the boot login screen."
         }
-        return "Done. Lock your screen (⌃⌘Q) — the lock screen now shows your login image while Wallps is running."
+        return "Done. Lock your screen (⌃⌘Q) — your lock image appears instantly."
     }
 
     static func currentLoginImageURL() -> URL? {
@@ -65,7 +65,7 @@ enum WallpaperService {
         return String(raw)
     }
 
-    private static func setDesktopWallpapers(_ url: URL) throws {
+    private static func setSystemWallpaper(_ url: URL) throws {
         let workspace = NSWorkspace.shared
         for screen in NSScreen.screens {
             try workspace.setDesktopImageURL(url, for: screen, options: [:])
