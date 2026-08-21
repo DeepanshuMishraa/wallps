@@ -30,11 +30,18 @@ Or open `Wallps.xcodeproj` in Xcode and press Run.
 
 ## Install
 
-1. Copy the built `Wallps.app` into `/Applications`
-2. Open Wallps, pick an image for Desktop and one for Lock screen, press **Set wallpapers**
-3. Turn on **Launch at login** so the swap keeps working after reboots
+Download the [latest release](https://github.com/DeepanshuMishraa/wallps/releases/latest)
+(`Wallps-1.0.0-macos.zip`), unzip, and move `Wallps.app` into `/Applications`.
 
-Lock your Mac with `⌃⌘Q` to see it in action.
+The app is not signed or notarized, so Gatekeeper blocks it. Approve it once:
+
+```sh
+sudo xattr -dr com.apple.quarantine /Applications/Wallps.app
+```
+
+Then open Wallps, pick an image for Desktop and one for Lock screen, press
+**Set wallpapers**, and turn on **Launch at login** so the swap keeps working
+after reboots. Lock your Mac with `⌃⌘Q` to see it in action.
 
 ## Notes
 
