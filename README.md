@@ -40,6 +40,13 @@ The app is not signed or notarized, so Gatekeeper blocks it. Approve it once:
 sudo xattr -dr com.apple.quarantine /Applications/Wallps.app
 ```
 
+Optionally verify the download (the download server enforces this hash
+automatically and refuses mismatched files):
+
+```sh
+shasum -a 256 -c <<< "e078e22e72cd0ee1923c7f9dd5389e1e69cbc6c2a28a63b6b1811d4c05cecb33  Wallps-1.0.1-macos.dmg"
+```
+
 Then open Wallps, pick an image for Desktop and one for Lock screen, press
 **Set wallpapers**, and turn on **Launch at login** so the swap keeps working
 after reboots. Lock your Mac with `⌃⌘Q` to see it in action.
