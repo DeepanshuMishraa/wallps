@@ -3,39 +3,69 @@ import AppKit
 final class DesktopCanvas {
     static let windowIdentifier = "WallpsCanvas"
 
-    private var windows: [NSWindow] = []
-    private var screenObserver: NSObjectProtocol?
+    private var image: NSImage?
     private var currentURL: URL?
+    private var windowsByDisplay: [UInt32: NSWindow] = [:]
+    private var screenObserver: NSObjectProtocol?
 
     func show(imageAt url: URL) {
         currentURL = url
         detachObserver()
         WallpaperImageStore.load(url) { [weak self] image in
             guard let self, let image else { return }
-            self.render(image: image)
+            self.image = image
+            self.reconcile()
+            self.attachObserver()
         }
+    }
+
+    /// Rebuilds coverage so every attached display has exactly one
+    /// correctly-sized window, drops windows for detached displays.
+    func reconcile() {
+        guard image != nil else { return }
+        rebuildForCurrentScreens()
+        attachObserver()
     }
 
     func tearDown() {
         detachObserver()
         currentURL = nil
-        for window in windows {
+        image = nil
+        for (_, window) in windowsByDisplay {
             window.orderOut(nil)
         }
-        windows.removeAll()
+        windowsByDisplay.removeAll()
     }
 
-    private func render(image: NSImage) {
-        for window in windows {
-            window.orderOut(nil)
-        }
-        windows.removeAll()
+    private func rebuildForCurrentScreens() {
+        guard let image else { return }
+
+        var seen = Set<UInt32>()
         for screen in NSScreen.screens {
-            let window = makeWindow(screen: screen, image: image)
-            window.orderFrontRegardless()
-            windows.append(window)
+            guard let raw = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
+                continue
+            }
+            let displayID = raw.uint32Value
+            seen.insert(displayID)
+
+            if let existing = windowsByDisplay[displayID] {
+                if existing.frame != screen.frame {
+                    existing.setFrame(screen.frame, display: false)
+                }
+                if let imageView = existing.contentView as? NSImageView, imageView.image !== image {
+                    imageView.image = image
+                }
+            } else {
+                let window = makeWindow(screen: screen, image: image)
+                window.orderFrontRegardless()
+                windowsByDisplay[displayID] = window
+            }
         }
-        attachObserver()
+
+        for (displayID, window) in windowsByDisplay where !seen.contains(displayID) {
+            window.orderOut(nil)
+            windowsByDisplay.removeValue(forKey: displayID)
+        }
     }
 
     private func makeWindow(screen: NSScreen, image: NSImage) -> NSWindow {
@@ -67,8 +97,7 @@ final class DesktopCanvas {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            guard let self, let url = self.currentURL else { return }
-            self.show(imageAt: url)
+            self?.reconcile()
         }
     }
 
