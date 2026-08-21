@@ -1,0 +1,39 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 56;
+	objects = {
+		000000000000000000000001 = {isa = PBXBuildFile; fileRef = 000000000000000000000011; };
+		000000000000000000000002 = {isa = PBXBuildFile; fileRef = 000000000000000000000012; };
+		000000000000000000000003 = {isa = PBXBuildFile; fileRef = 000000000000000000000013; };
+		000000000000000000000004 = {isa = PBXBuildFile; fileRef = 000000000000000000000014; };
+		000000000000000000000105 = {isa = PBXBuildFile; fileRef = 000000000000000000000115; };
+		000000000000000000000106 = {isa = PBXBuildFile; fileRef = 000000000000000000000116; };
+		000000000000000000000107 = {isa = PBXBuildFile; fileRef = 000000000000000000000117; };
+		000000000000000000000010 = {isa = PBXFileReference; lastKnownFileType = group; path = Wallps; sourceTree = "<group>"; };
+		000000000000000000000011 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallpsApp.swift; sourceTree = "<group>"; };
+		000000000000000000000012 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		000000000000000000000013 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallpaperService.swift; sourceTree = "<group>"; };
+		000000000000000000000014 = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		000000000000000000000115 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallpaperSwitcher.swift; sourceTree = "<group>"; };
+		000000000000000000000116 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginItemManager.swift; sourceTree = "<group>"; };
+		000000000000000000000117 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallpaperImageStore.swift; sourceTree = "<group>"; };
+		000000000000000000000020 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		000000000000000000000021 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		000000000000000000000022 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000001, 000000000000000000000002, 000000000000000000000003, 000000000000000000000105, 000000000000000000000106, 000000000000000000000107); runOnlyForDeploymentPostprocessing = 0; };
+		000000000000000000000030 = {isa = PBXGroup; children = (000000000000000000000011, 000000000000000000000012, 000000000000000000000013, 000000000000000000000115, 000000000000000000000116, 000000000000000000000117, 000000000000000000000014); sourceTree = "<group>"; };
+		000000000000000000000031 = {isa = PBXGroup; children = (000000000000000000000030, 000000000000000000000010); sourceTree = "<group>"; };
+		000000000000000000000040 = {isa = PBXNativeTarget; buildConfigurationList = 000000000000000000000051; buildPhases = (000000000000000000000022, 000000000000000000000020, 000000000000000000000021); buildRules = (); dependencies = (); name = Wallps; productName = Wallps; productReference = 000000000000000000000041; productType = "com.apple.product-type.application"; };
+		000000000000000000000041 = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Wallps.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		000000000000000000000050 = {isa = PBXProject; buildConfigurationList = 000000000000000000000052; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base); mainGroup = 000000000000000000000031; productRefGroup = 000000000000000000000060; projectDirPath = ""; projectRoot = ""; targets = (000000000000000000000040); };
+		000000000000000000000051 = {isa = XCConfigurationList; buildConfigurations = (000000000000000000000053, 000000000000000000000054); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		000000000000000000000052 = {isa = XCConfigurationList; buildConfigurations = (000000000000000000000055, 000000000000000000000056); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		000000000000000000000053 = {isa = XCBuildConfiguration; buildSettings = { CODE_SIGNING_ALLOWED = NO; INFOPLIST_FILE = Info.plist; MACOSX_DEPLOYMENT_TARGET = 13.0; PRODUCT_BUNDLE_IDENTIFIER = com.wallps.app; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.0; }; name = Debug; };
+		000000000000000000000054 = {isa = XCBuildConfiguration; buildSettings = { CODE_SIGNING_ALLOWED = NO; INFOPLIST_FILE = Info.plist; MACOSX_DEPLOYMENT_TARGET = 13.0; PRODUCT_BUNDLE_IDENTIFIER = com.wallps.app; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.0; }; name = Release; };
+		000000000000000000000055 = {isa = XCBuildConfiguration; buildSettings = { CODE_SIGNING_ALLOWED = NO; MACOSX_DEPLOYMENT_TARGET = 13.0; SWIFT_VERSION = 5.0; }; name = Debug; };
+		000000000000000000000056 = {isa = XCBuildConfiguration; buildSettings = { CODE_SIGNING_ALLOWED = NO; MACOSX_DEPLOYMENT_TARGET = 13.0; SWIFT_VERSION = 5.0; }; name = Release; };
+		000000000000000000000060 = {isa = PBXGroup; children = (000000000000000000000041); name = Products; sourceTree = "<group>"; };
+	};
+	rootObject = 000000000000000000000050;
+}
