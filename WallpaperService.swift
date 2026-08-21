@@ -19,6 +19,52 @@ enum WallpaperService {
         return "Done. Lock your screen (⌃⌘Q) — the lock screen now shows your login image while Wallps is running."
     }
 
+    static func currentLoginImageURL() -> URL? {
+        let major = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
+        if major >= 26 {
+            if let saved = WallpaperSwitcher.shared.savedLoginURL,
+               FileManager.default.fileExists(atPath: saved.path) {
+                return saved
+            }
+            return nil
+        }
+        if let uuid = currentUserUUID() {
+            let url = URL(fileURLWithPath: "/Library/Caches/Desktop Pictures/\(uuid)/lockscreen.png")
+            if FileManager.default.fileExists(atPath: url.path) {
+                return url
+            }
+        }
+        let admin = URL(fileURLWithPath: "/Library/Caches/com.apple.desktop.admin.png")
+        if FileManager.default.fileExists(atPath: admin.path) {
+            return admin
+        }
+        return nil
+    }
+
+    private static func currentUserUUID() -> String? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/dscl")
+        process.arguments = [".", "-read", "/Users/\(NSUserName())", "GeneratedUID"]
+        let output = Pipe()
+        process.standardOutput = output
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            return nil
+        }
+        guard process.terminationStatus == 0,
+              let data = try? output.fileHandleForReading.readToEnd(),
+              let line = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+        let components = line.split(whereSeparator: \.isWhitespace)
+        guard let raw = components.last, UUID(uuidString: String(raw)) != nil else {
+            return nil
+        }
+        return String(raw)
+    }
+
     private static func setDesktopWallpapers(_ url: URL) throws {
         let workspace = NSWorkspace.shared
         for screen in NSScreen.screens {

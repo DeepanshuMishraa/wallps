@@ -147,21 +147,35 @@ struct ContentView: View {
     }
 
     private func autoReapplySavedChoices() {
-        guard !didAutoReapply,
-              let desktop = WallpaperSwitcher.shared.savedDesktopURL,
-              let login = WallpaperSwitcher.shared.savedLoginURL,
-              FileManager.default.fileExists(atPath: desktop.path),
-              FileManager.default.fileExists(atPath: login.path) else { return }
+        guard !didAutoReapply else { return }
         didAutoReapply = true
-        desktopImage = desktop
-        loginImage = login
+
+        let savedDesktop = WallpaperSwitcher.shared.savedDesktopURL
+        let savedLogin = WallpaperSwitcher.shared.savedLoginURL
+        let desktopIsValid = savedDesktop.map { FileManager.default.fileExists(atPath: $0.path) } ?? false
+        let loginIsValid = savedLogin.map { FileManager.default.fileExists(atPath: $0.path) } ?? false
+
+        if loginIsValid, let savedLogin {
+            loginImage = savedLogin
+        } else {
+            loginImage = WallpaperService.currentLoginImageURL()
+        }
+
+        if desktopIsValid, let savedDesktop {
+            desktopImage = savedDesktop
+        } else {
+            desktopImage = NSScreen.screens.first.flatMap { NSWorkspace.shared.desktopImageURL(for: $0) }
+                ?? savedDesktop
+        }
+
+        guard desktopIsValid, loginIsValid, let savedDesktop, let savedLogin else { return }
         Task {
             isApplying = true
             statusMessage = "Reapplying your wallpapers…"
             statusIsError = false
             do {
-                statusMessage = try await WallpaperService.apply(desktop: desktop, login: login, legacyInstall: false)
-                WallpaperSwitcher.shared.arm(desktop: desktop, login: login)
+                statusMessage = try await WallpaperService.apply(desktop: savedDesktop, login: savedLogin, legacyInstall: false)
+                WallpaperSwitcher.shared.arm(desktop: savedDesktop, login: savedLogin)
             } catch {
                 statusMessage = "Could not reapply your saved wallpapers."
                 statusIsError = true
