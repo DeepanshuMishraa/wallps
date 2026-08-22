@@ -53,4 +53,5 @@ extension Notification.Name {
     static let setWallpapers = Notification.Name("WallpsSetWallpapers")
     static let refreshWallpaperPreviews = Notification.Name("WallpsRefreshPreviews")
     static let openMainWindow = Notification.Name("WallpsOpenMainWindow")
+    static let wallpsStateChanged = Notification.Name("WallpsStateChanged")
 }

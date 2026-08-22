@@ -1,3 +1,4 @@
+import AVFoundation
 import AppKit
 
 private final class CoverImageView: NSView {
@@ -30,37 +31,94 @@ private final class CoverImageView: NSView {
     }
 }
 
+private final class PlayerCoverView: NSView {
+    private let playerLayer = AVPlayerLayer()
+
+    init(player: AVQueuePlayer) {
+        super.init(frame: .zero)
+        wantsLayer = true
+        playerLayer.player = player
+        playerLayer.videoGravity = .resizeAspectFill
+        playerLayer.backgroundColor = NSColor.black.cgColor
+        layer?.addSublayer(playerLayer)
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override func layout() {
+        super.layout()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        playerLayer.frame = bounds
+        CATransaction.commit()
+    }
+}
+
 final class DesktopCanvas {
     static let windowIdentifier = "WallpsCanvas"
 
+    private var content: DesktopSource?
     private var image: NSImage?
-    private var currentURL: URL?
+    private var player: AVQueuePlayer?
+    private var looper: AVPlayerLooper?
     private var windowsByDisplay: [UInt32: NSWindow] = [:]
     private var screenObserver: NSObjectProtocol?
 
-    func show(imageAt url: URL) {
-        currentURL = url
+    func show(source: DesktopSource) {
         detachObserver()
-        WallpaperImageStore.load(url) { [weak self] image in
-            guard let self, let image else { return }
-            self.image = image
-            self.reconcile()
-            self.attachObserver()
+        stopPlayback()
+        removeAllWindows()
+
+        switch source {
+        case .image(let url):
+            WallpaperImageStore.load(url) { [weak self] loadedImage in
+                guard let self, let loadedImage else { return }
+                self.content = source
+                self.image = loadedImage
+                self.reconcile()
+                self.attachObserver()
+            }
+        case .video(let url):
+            let item = AVPlayerItem(url: url)
+            let queuePlayer = AVQueuePlayer()
+            queuePlayer.isMuted = true
+            looper = AVPlayerLooper(player: queuePlayer, templateItem: item)
+            player = queuePlayer
+            content = source
+            image = nil
+            queuePlayer.play()
+            reconcile()
+            attachObserver()
         }
     }
 
     /// Rebuilds coverage so every attached display has exactly one
     /// correctly-sized window, drops windows for detached displays.
     func reconcile() {
-        guard image != nil else { return }
+        guard content != nil else { return }
         rebuildForCurrentScreens()
         attachObserver()
     }
 
     func tearDown() {
         detachObserver()
-        currentURL = nil
+        content = nil
         image = nil
+        stopPlayback()
+        for (_, window) in windowsByDisplay {
+            window.orderOut(nil)
+        }
+        windowsByDisplay.removeAll()
+    }
+
+    private func stopPlayback() {
+        looper?.disableLooping()
+        looper = nil
+        player?.pause()
+        player = nil
+    }
+
+    private func removeAllWindows() {
         for (_, window) in windowsByDisplay {
             window.orderOut(nil)
         }
@@ -68,7 +126,7 @@ final class DesktopCanvas {
     }
 
     private func rebuildForCurrentScreens() {
-        guard let image else { return }
+        guard content != nil else { return }
 
         var seen = Set<UInt32>()
         for screen in NSScreen.screens {
@@ -82,11 +140,8 @@ final class DesktopCanvas {
                 if existing.frame != screen.frame {
                     existing.setFrame(screen.frame, display: false)
                 }
-                if let coverView = existing.contentView as? CoverImageView, coverView.image !== image {
-                    coverView.image = image
-                }
             } else {
-                let window = makeWindow(screen: screen, image: image)
+                let window = makeWindow(screen: screen)
                 window.orderFrontRegardless()
                 windowsByDisplay[displayID] = window
             }
@@ -98,7 +153,7 @@ final class DesktopCanvas {
         }
     }
 
-    private func makeWindow(screen: NSScreen, image: NSImage) -> NSWindow {
+    private func makeWindow(screen: NSScreen) -> NSWindow {
         let window = NSWindow(
             contentRect: screen.frame,
             styleMask: .borderless,
@@ -113,9 +168,14 @@ final class DesktopCanvas {
         window.ignoresMouseEvents = true
         window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
         window.animationBehavior = .none
-        let coverView = CoverImageView(frame: NSRect(origin: .zero, size: screen.frame.size))
-        coverView.image = image
-        window.contentView = coverView
+
+        if let player {
+            window.contentView = PlayerCoverView(player: player)
+        } else {
+            let coverView = CoverImageView(frame: NSRect(origin: .zero, size: screen.frame.size))
+            coverView.image = image
+            window.contentView = coverView
+        }
         return window
     }
 

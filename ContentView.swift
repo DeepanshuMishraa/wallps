@@ -40,6 +40,8 @@ struct ContentView: View {
     @State private var launchAtLogin = false
     @State private var showingLoginPrompt = false
     @State private var didAutoReapply = false
+    @State private var isPaused = false
+    @State private var showingBrowser = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -71,6 +73,13 @@ struct ContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .openMainWindow)) { _ in
             MenuBarManager.shared.showMainWindow()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .wallpsStateChanged)) { _ in
+            syncCardsFromSwitcher()
+            isPaused = WallpaperSwitcher.shared.isPaused
+        }
+        .sheet(isPresented: $showingBrowser) {
+            SystemWallpaperBrowserView()
         }
         .alert(item: $alert) { alert in
             Alert(
@@ -138,6 +147,34 @@ struct ContentView: View {
                 wallpaperCard(target: .desktop, image: desktopImage)
                 wallpaperCard(target: .login, image: loginImage)
             }
+            HStack(spacing: 18) {
+                Button {
+                    showingBrowser = true
+                } label: {
+                    Label("Browse system wallpapers", systemImage: "sparkles.rectangle.stack")
+                        .font(.callout.weight(.medium))
+                }
+                .controlSize(.large)
+                Spacer()
+            }
+            Toggle(isOn: $isPaused) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Pause Wallps")
+                        .font(.callout.weight(.medium))
+                    Text(isPaused
+                         ? "System Settings has full control. Turn back on to re-arm your wallpapers."
+                         : "Keeps your wallpapers active. Changes made in System Settings are adopted as your desktop wallpaper.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .toggleStyle(.switch)
+            .onChange(of: isPaused) { paused in
+                WallpaperSwitcher.shared.isPaused = paused
+                if !paused {
+                    syncCardsFromSwitcher()
+                }
+            }
             Toggle(isOn: $launchAtLogin) {
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Launch at login")
@@ -161,13 +198,27 @@ struct ContentView: View {
         .padding(22)
         .onAppear {
             MenuBarManager.shared.attachToMainWindowIfNeeded()
+            isPaused = WallpaperSwitcher.shared.isPaused
             autoReapplySavedChoices()
+        }
+    }
+
+    private func syncCardsFromSwitcher() {
+        let switcher = WallpaperSwitcher.shared
+        if let desktopURL = switcher.savedDesktopURL,
+           FileManager.default.fileExists(atPath: desktopURL.path) {
+            desktopImage = desktopURL
+        }
+        if let loginURL = switcher.savedLoginURL,
+           FileManager.default.fileExists(atPath: loginURL.path) {
+            loginImage = loginURL
         }
     }
 
     private func autoReapplySavedChoices() {
         guard !didAutoReapply else { return }
         didAutoReapply = true
+        guard !WallpaperSwitcher.shared.isPaused else { return }
 
         let savedDesktop = WallpaperSwitcher.shared.savedDesktopURL
         let savedLogin = WallpaperSwitcher.shared.savedLoginURL
@@ -251,7 +302,7 @@ struct ContentView: View {
             }
             .buttonStyle(ProminentButtonStyle())
             .keyboardShortcut(.return, modifiers: [.command])
-            .disabled(desktopImage == nil || loginImage == nil || isApplying)
+            .disabled(desktopImage == nil || loginImage == nil || isApplying || isPaused)
         }
         .padding(.horizontal, 22)
         .padding(.vertical, 14)
