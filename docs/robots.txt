@@ -1,0 +1,26 @@
+User-agent: *
+Allow: /
+
+# These agents are explicitly allowed to read the public site.
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: GPTBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: DeepSeekBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: ora-agent
+Allow: /
+
+Sitemap: https://deepanshumishraa.github.io/wallps/sitemap.xml

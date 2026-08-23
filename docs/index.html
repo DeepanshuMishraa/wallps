@@ -4,7 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Wallps — different wallpapers for desktop &amp; lock screen</title>
-  <meta name="description" content="Different wallpapers for desktop and lock screen on macOS 13+. Free and open source.">
+  <meta name="description" content="Wallps is a free, open-source macOS menu bar app that keeps separate wallpapers on your desktop and lock screen.">
+  <link rel="canonical" href="https://deepanshumishraa.github.io/wallps/">
+  <link rel="alternate" type="text/markdown" href="https://deepanshumishraa.github.io/wallps/index.md">
+  <meta property="og:title" content="Wallps — separate desktop and lock screen wallpapers">
+  <meta property="og:description" content="A free, open-source macOS app for keeping desktop and lock screen wallpapers separate.">
+  <meta property="og:url" content="https://deepanshumishraa.github.io/wallps/">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect x='8' y='8' width='84' height='84' rx='22' fill='%23fafafa'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -17,7 +24,8 @@
       min-height: 100svh;
       display: grid;
       place-items: center;
-      overflow: hidden;
+      overflow-x: hidden;
+      overflow-y: auto;
       background: #09090b;
       color: #fafafa;
       font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -40,7 +48,8 @@
     main {
       position: relative;
       text-align: center;
-      padding: 48px 24px;
+      max-width: 820px;
+      padding: 48px 24px 64px;
     }
 
     main > * {
@@ -127,6 +136,42 @@
     }
     .meta a:hover { color: #fafafa; border-color: #fafafa; }
 
+    .details {
+      max-width: 650px;
+      margin: 42px auto 0;
+      text-align: left;
+      color: #a1a1aa;
+      font-size: 13px;
+      line-height: 1.75;
+    }
+    .details h2 {
+      margin-bottom: 10px;
+      color: #fafafa;
+      font-size: 15px;
+      font-weight: 500;
+      letter-spacing: -0.02em;
+    }
+    .details p + p { margin-top: 12px; }
+    .details ul {
+      display: grid;
+      gap: 7px;
+      margin: 14px 0 0 18px;
+    }
+    .details a { color: #d4d4d8; }
+    .details a:hover { color: #fafafa; }
+
+    .site-links {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px 18px;
+      margin-top: 30px;
+      color: #71717a;
+      font-size: 11px;
+    }
+    .site-links a { color: inherit; }
+    .site-links a:hover { color: #fafafa; }
+
     @media (prefers-reduced-motion: reduce) {
       main > * { animation: none; opacity: 1; }
       .button { transition: none; }
@@ -145,6 +190,38 @@
       Download for macOS
     </a>
     <p class="meta">macOS 13+ &middot; Free &middot; Open source &middot; <a href="https://github.com/DeepanshuMishraa/wallps">GitHub</a></p>
+    <section class="details" aria-labelledby="what-is-wallps">
+      <h2 id="what-is-wallps">What is Wallps?</h2>
+      <p>Wallps is a small macOS menu bar app for people who want a different image on their desktop and lock screen. macOS normally renders both surfaces from the desktop wallpaper; Wallps keeps the two choices separate and reapplies them when the Mac locks, wakes, sleeps, logs out, or restarts.</p>
+      <p>Choose a desktop image and a lock screen image, then let Wallps keep them in sync. It supports macOS 13 and later, multiple displays, drag-and-drop image selection, optional launch at login, and a menu bar control for checking or refreshing both wallpapers.</p>
+      <ul>
+        <li>Use Wallps when a separate lock screen image matters to your workspace or privacy.</li>
+        <li>Download the free app or <a href="https://github.com/DeepanshuMishraa/wallps">inspect and build the open-source project</a>.</li>
+        <li>Read the <a href="about/">about page</a>, <a href="contact/">contact details</a>, or <a href="privacy/">privacy policy</a> before installing.</li>
+      </ul>
+    </section>
+    <nav class="site-links" aria-label="Site information">
+      <a href="about/">About Wallps</a>
+      <a href="contact/">Contact</a>
+      <a href="privacy/">Privacy</a>
+      <a href="llms.txt">Agent instructions</a>
+    </nav>
   </main>
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Wallps",
+      "description": "A free, open-source macOS menu bar app that keeps separate wallpapers on your desktop and lock screen.",
+      "url": "https://deepanshumishraa.github.io/wallps/",
+      "downloadUrl": "https://wallps-download.d4deepanshu723.workers.dev/Wallps-1.0.3-macos.dmg",
+      "applicationCategory": "UtilitiesApplication",
+      "operatingSystem": "macOS 13 and later",
+      "isAccessibleForFree": true,
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+      "codeRepository": "https://github.com/DeepanshuMishraa/wallps",
+      "author": { "@type": "Person", "name": "Deepanshu Mishraa", "url": "https://github.com/DeepanshuMishraa" }
+    }
+  </script>
 </body>
 </html>

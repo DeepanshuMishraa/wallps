@@ -2,6 +2,8 @@
 
 Separate wallpapers for your desktop and lock screen on macOS 13+.
 
+Project homepage: https://deepanshumishraa.github.io/wallps/
+
 macOS always renders the lock screen from the desktop wallpaper — there is no
 setting to split them. Wallps gives you both anyway: pick an image for each.
 Your lock screen always shows the **lock screen image**, and your desktop
