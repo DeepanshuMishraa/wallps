@@ -5,6 +5,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var attachAttempts = 0
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        FontRegistrar.registerBundledFonts()
         MenuBarManager.shared.install()
         attachWindowDelegate()
         let event = NSAppleEventManager.shared().currentAppleEvent
@@ -32,12 +33,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 struct WallpsApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
+    init() {
+        FontRegistrar.registerBundledFonts()
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()
         }
+        .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
-        .defaultSize(width: 760, height: 560)
+        .defaultSize(width: 520, height: 640)
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("Set wallpapers") {

@@ -9,14 +9,14 @@ enum ImportTarget {
     var title: String {
         switch self {
         case .desktop: return "Desktop"
-        case .login: return "Lock screen"
+        case .login: return "Lock Screen"
         }
     }
 
     var subtitle: String {
         switch self {
-        case .desktop: return "Visible after you sign in"
-        case .login: return "Visible before you sign in"
+        case .desktop: return "Visible when signed in"
+        case .login: return "Visible on lock screen"
         }
     }
 
@@ -24,6 +24,13 @@ enum ImportTarget {
         switch self {
         case .desktop: return "macbook"
         case .login: return "lock.display"
+        }
+    }
+
+    var chipLabel: String {
+        switch self {
+        case .desktop: return "DESKTOP"
+        case .login: return "LOCK SCREEN"
         }
     }
 }
@@ -45,14 +52,23 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
-            Divider()
-            content
-            Divider()
-            footer
+            titleBar
+            Rectangle().fill(Design.hairline).frame(height: 1)
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 22) {
+                    cardsSection
+                    generalSection
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
+                .padding(.bottom, 24)
+            }
+            statusBar
         }
-        .frame(minWidth: 660, minHeight: 470)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(Design.background)
+        .preferredColorScheme(.dark)
+        .frame(minWidth: 480, idealWidth: 520, maxWidth: 640, minHeight: 580, idealHeight: 640)
+        .background(WindowChromeConfigurator())
         .fileImporter(
             isPresented: $isImporting,
             allowedContentTypes: [.image],
@@ -112,79 +128,80 @@ struct ContentView: View {
         } message: {
             Text("Wallps starts hidden at every login and keeps swapping your desktop and lock screen wallpapers automatically. You can turn this off anytime.")
         }
-    }
-
-    private var header: some View {
-        HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text("Wallps")
-                        .font(.system(size: 17, weight: .bold))
-                    Text("v\(appVersion)")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
-                Text("Separate wallpapers for your desktop and lock screen.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Image(systemName: "rectangle.2.swap")
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(.tertiary)
+        .onAppear {
+            FontRegistrar.registerBundledFonts()
+            MenuBarManager.shared.attachToMainWindowIfNeeded()
+            isPaused = WallpaperSwitcher.shared.isPaused
+            autoReapplySavedChoices()
         }
-        .padding(.horizontal, 22)
-        .padding(.vertical, 16)
     }
 
     private var appVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.3"
     }
 
-    private var content: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 12) {
-                wallpaperCard(target: .desktop, image: desktopImage)
-                wallpaperCard(target: .login, image: loginImage)
+    // MARK: - Title Bar
+
+    private var titleBar: some View {
+        HStack(spacing: 9) {
+            StatusDot(filled: true, isGlowing: true)
+            Text("WALLPS")
+                .font(Design.mono(11, .bold))
+                .tracking(2.2)
+                .foregroundStyle(Design.ink)
+            Text("v\(appVersion)")
+                .font(Design.mono(9.5, .medium))
+                .foregroundStyle(Design.inkTertiary)
+
+            Spacer()
+
+            GhostIconButton(
+                symbol: "sparkles.rectangle.stack",
+                help: "Browse Apple system wallpapers & aerials",
+                badge: "BROWSE"
+            ) {
+                showingBrowser = true
             }
-            HStack(spacing: 18) {
-                Button {
-                    showingBrowser = true
-                } label: {
-                    Label("Browse system wallpapers", systemImage: "sparkles.rectangle.stack")
-                        .font(.callout.weight(.medium))
-                }
-                .controlSize(.large)
-                Spacer()
-            }
-            Toggle(isOn: $isPaused) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Pause Wallps")
-                        .font(.callout.weight(.medium))
-                    Text(isPaused
-                         ? "System Settings has full control. Turn back on to re-arm your wallpapers."
-                         : "Keeps your wallpapers active. Changes made in System Settings are adopted as your desktop wallpaper.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .toggleStyle(.switch)
+        }
+        .padding(.leading, 78)
+        .padding(.trailing, 16)
+        .frame(height: 48)
+    }
+
+    // MARK: - Sections
+
+    private var cardsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionLabel("Wallpapers")
+            wallpaperCard(target: .desktop, image: desktopImage)
+            wallpaperCard(target: .login, image: loginImage)
+        }
+    }
+
+    private var generalSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionLabel("General")
+            optionRow(
+                icon: "pause.fill",
+                title: "Pause Wallps",
+                detail: isPaused
+                    ? "System Settings has full control."
+                    : "Changes from System Settings are adopted as your desktop wallpaper.",
+                binding: $isPaused
+            )
             .onChange(of: isPaused) { paused in
                 WallpaperSwitcher.shared.isPaused = paused
                 if !paused {
                     syncCardsFromSwitcher()
                 }
             }
-            Toggle(isOn: $launchAtLogin) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Launch at login")
-                        .font(.callout.weight(.medium))
-                    Text("Starts hidden and keeps the lock-screen swap armed after every reboot.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .toggleStyle(.checkbox)
+
+            optionRow(
+                icon: "power",
+                title: "Launch at Login",
+                detail: "Starts hidden and keeps the lock-screen swap armed after reboot.",
+                binding: $launchAtLogin
+            )
             .onAppear { launchAtLogin = LoginItemManager.isEnabled }
             .onChange(of: launchAtLogin) { enabled in
                 guard enabled else {
@@ -195,13 +212,48 @@ struct ContentView: View {
                 showingLoginPrompt = true
             }
         }
-        .padding(22)
-        .onAppear {
-            MenuBarManager.shared.attachToMainWindowIfNeeded()
-            isPaused = WallpaperSwitcher.shared.isPaused
-            autoReapplySavedChoices()
-        }
     }
+
+    private func optionRow(
+        icon: String,
+        title: String,
+        detail: String,
+        binding: Binding<Bool>
+    ) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Design.inkSecondary)
+                .frame(width: 30, height: 30)
+                .background(Design.surfaceRaised, in: RoundedRectangle(cornerRadius: 7))
+                .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Design.hairline, lineWidth: 1))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(Design.mono(11.5, .medium))
+                    .foregroundStyle(Design.ink)
+                Text(detail)
+                    .font(Design.mono(9.5, .regular))
+                    .foregroundStyle(Design.inkTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 16)
+
+            Toggle("", isOn: binding)
+                .labelsHidden()
+                .toggleStyle(PillToggleStyle())
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(Design.surface, in: RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(Design.hairline, lineWidth: 1)
+        )
+    }
+
+    // MARK: - Cards & status
 
     private func syncCardsFromSwitcher() {
         let switcher = WallpaperSwitcher.shared
@@ -241,13 +293,13 @@ struct ContentView: View {
         guard desktopIsValid, loginIsValid, let savedDesktop, let savedLogin else { return }
         Task {
             isApplying = true
-            statusMessage = "Reapplying your wallpapers…"
+            statusMessage = "Reapplying saved wallpapers…"
             statusIsError = false
             do {
                 statusMessage = try await WallpaperService.apply(login: savedLogin, legacyInstall: false)
                 WallpaperSwitcher.shared.arm(desktop: savedDesktop, login: savedLogin)
             } catch {
-                statusMessage = "Could not reapply your saved wallpapers."
+                statusMessage = "Could not reapply saved wallpapers."
                 statusIsError = true
             }
             isApplying = false
@@ -268,44 +320,43 @@ struct ContentView: View {
         )
     }
 
-    private var footer: some View {
-        HStack(spacing: 12) {
-            Group {
-                if let message = statusMessage {
-                    Label(message, systemImage: statusIsError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                        .font(.caption)
-                        .foregroundStyle(statusIsError ? .orange : .secondary)
-                        .transition(.opacity)
-                } else {
-                    Text("Pick two images, then set them. Lock your Mac (⌃⌘Q) to preview.")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
-            }
-            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: statusMessage)
-            Spacer()
-            Button {
-                applyWallpapers()
-            } label: {
-                HStack(spacing: 7) {
-                    if isApplying {
-                        ProgressView()
-                            .controlSize(.small)
-                        Text("Applying")
-                    } else {
-                        Text("Set wallpapers")
-                        Image(systemName: "arrow.right")
-                            .font(.system(size: 11, weight: .semibold))
-                    }
-                }
-                .frame(minWidth: 138)
-            }
-            .buttonStyle(ProminentButtonStyle())
-            .keyboardShortcut(.return, modifiers: [.command])
-            .disabled(desktopImage == nil || loginImage == nil || isApplying || isPaused)
+    private var statusText: String {
+        if let message = statusMessage {
+            return message.uppercased()
         }
-        .padding(.horizontal, 22)
-        .padding(.vertical, 14)
+        if isPaused {
+            return "PAUSED — SYSTEM SETTINGS IN CONTROL"
+        }
+        return "LOCK YOUR MAC (⌃⌘Q) TO PREVIEW"
+    }
+
+    private var statusBar: some View {
+        ZStack(alignment: .top) {
+            Rectangle().fill(Design.hairline).frame(height: 1)
+            HStack(spacing: 12) {
+                HStack(spacing: 7) {
+                    StatusDot(filled: statusMessage != nil && !statusIsError, isGlowing: statusMessage != nil && !statusIsError)
+                    Text(statusText)
+                        .font(Design.mono(9.5, .medium))
+                        .tracking(0.8)
+                        .foregroundStyle(statusIsError ? Color(red: 1.0, green: 0.45, blue: 0.45) : Design.inkTertiary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                Spacer()
+                PrimaryActionButton(
+                    title: isApplying ? "Applying" : "Set Wallpapers",
+                    isLoading: isApplying,
+                    keyEquivalent: .return
+                ) {
+                    applyWallpapers()
+                }
+                .disabled(desktopImage == nil || loginImage == nil || isApplying || isPaused)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+        }
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: statusMessage)
     }
 
     private func chooseImage(for target: ImportTarget) {
@@ -323,7 +374,7 @@ struct ContentView: View {
                 statusMessage = try await WallpaperService.apply(login: loginImage)
                 WallpaperSwitcher.shared.arm(desktop: desktopImage, login: loginImage)
             } catch {
-                statusMessage = "Could not apply both wallpapers."
+                statusMessage = "Could not apply wallpapers."
                 statusIsError = true
                 alert = WallpaperService.AlertMessage(title: "Wallpaper setup failed", message: error.localizedDescription)
             }
@@ -331,6 +382,8 @@ struct ContentView: View {
         }
     }
 }
+
+// MARK: - Wallpaper Card View
 
 private struct WallpaperCardView: View {
     let target: ImportTarget
@@ -341,50 +394,49 @@ private struct WallpaperCardView: View {
     @State private var cacheGeneration = 0
     @State private var hovering = false
     @State private var dropping = false
+    @State private var videoPreview: NSImage?
+
+    private var isVideo: Bool {
+        ["mov", "mp4", "m4v"].contains(url?.pathExtension.lowercased() ?? "")
+    }
 
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(nsColor: .controlBackgroundColor))
-            if let url, let image = WallpaperImageStore.cachedImage(for: url) {
-                Image(nsImage: image)
-                    .resizable()
-                    .scaledToFill()
-                    .transition(.opacity)
-            } else {
-                VStack(spacing: 8) {
-                    Image(systemName: "photo.on.rectangle.angled")
-                        .font(.system(size: 24, weight: .light))
-                        .foregroundStyle(.tertiary)
-                    Text("Choose an image")
-                        .font(.callout.weight(.medium))
-                        .foregroundStyle(.secondary)
+        Button(action: onPick) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Design.surface)
+
+                GeometryReader { geo in
+                    imageLayer(size: geo.size)
                 }
+
+                if url != nil {
+                    LinearGradient(
+                        colors: [
+                            Color.black.opacity(0.65),
+                            Color.clear,
+                            Color.black.opacity(0.70)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
+
+                foregroundControls
             }
-            LinearGradient(
-                colors: [.clear, .black.opacity(0.35)],
-                startPoint: .center,
-                endPoint: .bottom
+            .frame(height: 160)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(
+                        dropping ? Color.white : (hovering ? Color.white.opacity(0.35) : Design.hairline),
+                        lineWidth: dropping ? 2 : 1
+                    )
             )
-            bottomBar
-                .opacity(hovering ? 1 : 0.8)
         }
-        .frame(height: 214)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .contentShape(RoundedRectangle(cornerRadius: 12))
-        .scaleEffect(hovering ? 1.015 : 1)
-        .animation(.spring(response: 0.35, dampingFraction: 0.75), value: hovering)
-        .shadow(color: .black.opacity(hovering ? 0.18 : 0.08), radius: hovering ? 14 : 5, y: hovering ? 6 : 2)
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(Color.primary.opacity(0.05), lineWidth: 1)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
-                .opacity(dropping ? 1 : 0)
-        )
+        .buttonStyle(.plain)
         .onHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.15), value: hovering)
         .onDrop(of: [UTType.fileURL.identifier], isTargeted: $dropping) { providers in
             guard let provider = providers.first else { return false }
             provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
@@ -399,7 +451,158 @@ private struct WallpaperCardView: View {
             return true
         }
         .task(id: url) {
-            guard let url else { return }
+            await reloadPreview()
+        }
+    }
+
+    @ViewBuilder
+    private func imageLayer(size: CGSize) -> some View {
+        if let url {
+            if isVideo {
+                if let videoPreview {
+                    Image(nsImage: videoPreview)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: size.width, height: size.height)
+                        .clipped()
+                } else {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(Design.inkTertiary)
+                        .frame(width: size.width, height: size.height)
+                }
+            } else if let image = WallpaperImageStore.cachedImage(for: url) {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: size.width, height: size.height)
+                    .clipped()
+            } else {
+                emptyState
+            }
+        } else {
+            emptyState
+        }
+    }
+
+    private var foregroundControls: some View {
+        VStack(spacing: 0) {
+            headerRow
+            Spacer()
+            footerRow
+        }
+        .padding(10)
+    }
+
+    private var headerRow: some View {
+        HStack(spacing: 6) {
+            HStack(spacing: 5) {
+                Image(systemName: target.symbol)
+                    .font(.system(size: 10, weight: .semibold))
+                Text(target.chipLabel)
+                    .font(Design.mono(9, .semibold))
+                    .tracking(1.2)
+            }
+            .foregroundStyle(Color.white)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(Color.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
+
+            if isVideo {
+                HStack(spacing: 4) {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 8, weight: .bold))
+                    Text("LIVE")
+                        .font(Design.mono(8.5, .bold))
+                        .tracking(1.0)
+                }
+                .foregroundStyle(Color.white)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 5)
+                .background(Color.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 6))
+                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
+            }
+
+            Spacer()
+
+            editPencilButton
+        }
+    }
+
+    private var editPencilButton: some View {
+        HStack(spacing: 5) {
+            Image(systemName: url == nil ? "plus" : "pencil")
+                .font(.system(size: 11, weight: .bold))
+            Text(url == nil ? "CHOOSE" : "EDIT")
+                .font(Design.mono(9, .bold))
+                .tracking(1.0)
+        }
+        .foregroundStyle(hovering ? Color.black : Color.white)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(hovering ? Color.white : Color.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 6))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(hovering ? Color.white : Color.white.opacity(0.25), lineWidth: 1)
+        )
+        .shadow(color: hovering ? Color.white.opacity(0.2) : Color.clear, radius: 6, y: 1)
+    }
+
+    private var footerRow: some View {
+        HStack(alignment: .bottom, spacing: 8) {
+            if let url {
+                HStack(spacing: 5) {
+                    Image(systemName: "photo")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Design.inkSecondary)
+                    Text(url.lastPathComponent)
+                        .font(Design.mono(9.5, .medium))
+                        .foregroundStyle(Color.white)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 5))
+                .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color.white.opacity(0.15), lineWidth: 1))
+            }
+            Spacer()
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 8) {
+            Image(systemName: target.symbol)
+                .font(.system(size: 22, weight: .light))
+                .foregroundStyle(Design.inkTertiary)
+            VStack(spacing: 2) {
+                Text("CHOOSE \(target.chipLabel) IMAGE")
+                    .font(Design.mono(10, .semibold))
+                    .tracking(1.4)
+                    .foregroundStyle(Design.inkSecondary)
+                Text("Drop file here or click to choose")
+                    .font(Design.mono(9, .regular))
+                    .foregroundStyle(Design.inkTertiary)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func reloadPreview() async {
+        guard let url else { return }
+        if isVideo {
+            videoPreview = nil
+            let preferredID = url.deletingPathExtension().lastPathComponent
+            if let poster = await SystemWallpaperCatalog.posterFrame(
+                forVideoAt: url,
+                preferredID: preferredID
+            ) {
+                withAnimation(.easeOut(duration: 0.25)) {
+                    videoPreview = NSImage(contentsOf: poster)
+                }
+            }
+        } else {
             WallpaperImageStore.load(url) { image in
                 if image != nil {
                     DispatchQueue.main.async {
@@ -408,62 +611,6 @@ private struct WallpaperCardView: View {
                 }
             }
         }
-    }
-
-    private var bottomBar: some View {
-        HStack(spacing: 10) {
-            Label(target.title, systemImage: target.symbol)
-                .font(.callout.weight(.semibold))
-                .foregroundStyle(.white)
-            Spacer(minLength: 8)
-            if let url {
-                Text(url.lastPathComponent)
-                    .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.85))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .frame(maxWidth: 140, alignment: .trailing)
-            }
-            Button(action: onPick) {
-                ZStack {
-                    Circle()
-                        .fill(.white.opacity(0.92))
-                    Image(systemName: url == nil ? "plus" : "pencil")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(.black.opacity(0.65))
-                }
-                .frame(width: 27, height: 27)
-            }
-            .buttonStyle(PressScaleButtonStyle())
-            .help(url == nil ? "Choose an image" : "Choose a different image")
-        }
-        .padding(.horizontal, 12)
-        .padding(.bottom, 10)
-        .frame(maxHeight: .infinity, alignment: .bottom)
-    }
-}
-
-private struct PressScaleButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.92 : 1)
-            .animation(.spring(response: 0.3, dampingFraction: 0.65), value: configuration.isPressed)
-    }
-}
-
-private struct ProminentButtonStyle: ButtonStyle {
-    @Environment(\.isEnabled) private var isEnabled
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.callout.weight(.semibold))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(Color.accentColor, in: Capsule())
-            .opacity(isEnabled ? (configuration.isPressed ? 0.8 : 1) : 0.4)
-            .scaleEffect(configuration.isPressed ? 0.96 : 1)
-            .animation(.spring(response: 0.3, dampingFraction: 0.65), value: configuration.isPressed)
     }
 }
 

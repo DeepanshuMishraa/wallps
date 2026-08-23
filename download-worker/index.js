@@ -1,5 +1,5 @@
 const PINNED = {
-  "Wallps-1.0.2-macos.dmg": "9cad94f93143c027c2ab130d07b122278340058aaffef849b91273544eb695ae",
+  "Wallps-1.0.3-macos.dmg": "686d9ce16ca835de657da11b30fa51caf29ad2b4c6a3a29da7eacd3b62eb53f7",
 };
 
 const ALLOWED_NAME = /^Wallps-\d+\.\d+\.\d+-macos\.dmg(\.sha256)?$/;

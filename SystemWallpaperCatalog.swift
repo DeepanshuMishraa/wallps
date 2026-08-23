@@ -93,18 +93,39 @@ enum SystemWallpaperCatalog {
     private static let appleAerialVideosDirectory = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Application Support/com.apple.wallpaper/aerials/videos", isDirectory: true)
 
+    private static var inMemoryCatalog: [SystemWallpaperItem]?
+    private static let catalogLock = NSLock()
+
     static func makeDirectories() {
         for directory in [appSupportDirectory, aerialsDirectory, dynamicDirectory, postersDirectory] {
             try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         }
     }
 
-    static func items() -> [SystemWallpaperItem] {
+    static func items(forceRefresh: Bool = false) -> [SystemWallpaperItem] {
+        catalogLock.lock()
+        if !forceRefresh, let cached = inMemoryCatalog {
+            catalogLock.unlock()
+            return cached
+        }
+        catalogLock.unlock()
+
         var result: [SystemWallpaperItem] = []
         result.append(contentsOf: aerialItems())
         result.append(contentsOf: dynamicItems())
         result.append(contentsOf: staticImageItems())
+
+        catalogLock.lock()
+        inMemoryCatalog = result
+        catalogLock.unlock()
+
         return result
+    }
+
+    static func invalidateCatalogCache() {
+        catalogLock.lock()
+        inMemoryCatalog = nil
+        catalogLock.unlock()
     }
 
     static func localizedAerialNames() -> [String: String] {
@@ -198,7 +219,7 @@ enum SystemWallpaperCatalog {
 
         return descriptors.compactMap { descriptor in
             guard let plist = NSDictionary(contentsOf: descriptor),
-                  let assetID = plist["mobileAssetID"] as? String else {
+              let assetID = plist["mobileAssetID"] as? String else {
                 return nil
             }
             let name = names[assetID] ?? descriptor.deletingPathExtension().lastPathComponent
@@ -285,10 +306,10 @@ enum SystemWallpaperCatalog {
         let asset = AVURLAsset(url: videoURL)
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
-        generator.maximumSize = CGSize(width: 3840, height: 2160)
+        generator.maximumSize = CGSize(width: 1920, height: 1080)
         do {
             let duration = try await asset.load(.duration)
-            let midpoint = CMTime(seconds: min(3, duration.seconds * 0.25), preferredTimescale: 600)
+            let midpoint = CMTime(seconds: min(2, duration.seconds * 0.2), preferredTimescale: 600)
             let (frame, _) = try await generator.image(at: midpoint)
             let rep = NSBitmapImageRep(cgImage: frame)
             guard let png = rep.representation(using: .png, properties: [:]) else { return nil }
@@ -331,7 +352,11 @@ final class WallpaperDownloadCenter: ObservableObject {
         }
         let task = Task<URL, Error> { [weak self] in
             guard let self else { throw WallpaperDownloadError.cancelled }
-            defer { self.tasks[item.id] = nil; self.progress[item.id] = nil }
+            defer {
+                self.tasks[item.id] = nil
+                self.progress[item.id] = nil
+                SystemWallpaperCatalog.invalidateCatalogCache()
+            }
             do {
                 let url = try await Self.download(info: info, item: item) { fraction in
                     Task { @MainActor in
