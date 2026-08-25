@@ -33,7 +33,7 @@ struct SystemWallpaperBrowserView: View {
         var title: String {
             switch self {
             case .aerials: return "AERIALS"
-            case .dynamicAndStatic: return "DYNAMIC & STILLS"
+            case .dynamicAndStatic: return "SYSTEM STILLS"
             }
         }
 
@@ -45,17 +45,15 @@ struct SystemWallpaperBrowserView: View {
         }
     }
 
-    private let columns = [GridItem(.adaptive(minimum: 150, maximum: 240), spacing: 12)]
+    private let columns = [GridItem(.adaptive(minimum: 190, maximum: 360), spacing: 16)]
 
     var body: some View {
         VStack(spacing: 0) {
             header
-            Rectangle().fill(Design.hairline).frame(height: 1)
             grid
         }
         .background(Design.background)
-        .preferredColorScheme(.dark)
-        .frame(minWidth: 580, minHeight: 500)
+        .frame(minWidth: 640, idealWidth: 840, maxWidth: .infinity, minHeight: 480, idealHeight: 600, maxHeight: .infinity)
         .alert(item: $alert) { alert in
             Alert(
                 title: Text(alert.title),
@@ -82,60 +80,84 @@ struct SystemWallpaperBrowserView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 10) {
-                StatusDot(filled: true, isGlowing: true)
-                Text("SYSTEM WALLPAPERS")
-                    .font(Design.mono(11, .semibold))
-                    .tracking(2.4)
+                StatusDot(filled: true, isGlowing: true, customColor: Design.accent)
+
+                Text("APPLE WALLPAPERS & 4K AERIALS")
+                    .font(Design.font(12, weight: .bold))
+                    .tracking(2.0)
                     .foregroundStyle(Design.ink)
+
                 Spacer()
-                GhostIconButton(symbol: "xmark", help: "Close") {
+
+                GhostIconButton(symbol: "xmark", text: "CLOSE", help: "Close Catalog (ESC)") {
                     dismiss()
                 }
                 .keyboardShortcut(.cancelAction)
             }
 
-            HStack(spacing: 10) {
-                HStack(spacing: 7) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Design.inkTertiary)
-                    TextField("Search", text: $searchText)
-                        .textFieldStyle(.plain)
-                        .font(Design.mono(11, .regular))
-                        .foregroundStyle(Design.ink)
-                    if !searchText.isEmpty {
-                        Button {
-                            searchText = ""
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 11))
-                                .foregroundStyle(Design.inkTertiary)
-                        }
-                        .buttonStyle(.plain)
+            ViewThatFits(in: .horizontal) {
+                // Wide layout
+                HStack(spacing: 12) {
+                    searchBarView
+                        .frame(maxWidth: 280)
+
+                    Spacer(minLength: 0)
+
+                    SegmentedSwitch(options: Filter.allCases, selection: $filter) { $0.title }
+
+                    if filter == .aerials {
+                        SegmentedSwitch(options: AerialMode.allCases, selection: $aerialMode) { $0.title }
+                            .help("Apply aerials as looping video or still frame")
                     }
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .background(Design.surface, in: RoundedRectangle(cornerRadius: 8))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .strokeBorder(Design.hairline, lineWidth: 1)
-                )
-                .frame(maxWidth: 250)
 
-                Spacer(minLength: 0)
+                // Narrow layout
+                VStack(alignment: .leading, spacing: 10) {
+                    searchBarView
 
-                SegmentedSwitch(options: Filter.allCases, selection: $filter) { $0.title }
+                    HStack(spacing: 8) {
+                        SegmentedSwitch(options: Filter.allCases, selection: $filter) { $0.title }
 
-                if filter == .aerials {
-                    SegmentedSwitch(options: AerialMode.allCases, selection: $aerialMode) { $0.title }
-                        .help("Apply aerials as looping video or a still frame")
+                        if filter == .aerials {
+                            SegmentedSwitch(options: AerialMode.allCases, selection: $aerialMode) { $0.title }
+                        }
+                    }
                 }
             }
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, 22)
         .padding(.top, 18)
         .padding(.bottom, 16)
+    }
+
+    private var searchBarView: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 11))
+                .foregroundStyle(Design.inkTertiary)
+            TextField("SEARCH CATALOG…", text: $searchText)
+                .textFieldStyle(.plain)
+                .font(Design.font(11, weight: .regular))
+                .foregroundStyle(Design.ink)
+            if !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Design.inkTertiary)
+                }
+                .buttonStyle(.plain)
+                .pointerOnHover()
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(Design.surface, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .strokeBorder(Design.hairline, lineWidth: 1)
+        )
     }
 
     private var grid: some View {
@@ -153,7 +175,8 @@ struct SystemWallpaperBrowserView: View {
                     )
                 }
             }
-            .padding(20)
+            .padding(.horizontal, 22)
+            .padding(.bottom, 24)
         }
     }
 
@@ -234,20 +257,23 @@ private struct SystemWallpaperCellView: View {
     private var isBusy: Bool { downloadFraction != nil || applying }
 
     var body: some View {
-        VStack(spacing: 7) {
+        VStack(alignment: .leading, spacing: 6) {
             thumbnail
             HStack(spacing: 6) {
-                Text(item.name)
-                    .font(Design.mono(10.5, .medium))
+                Text(item.name.uppercased())
+                    .font(Design.font(10, weight: .bold))
+                    .tracking(0.6)
                     .foregroundStyle(hovering ? Design.ink : Design.inkSecondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
                 Spacer(minLength: 4)
-                StatusDot(filled: item.isDownloaded)
+                if item.isDownloaded {
+                    StatusDot(filled: true, customColor: Design.success)
+                }
             }
         }
         .onHover { hovering = $0 }
-        .animation(.easeOut(duration: 0.15), value: hovering)
+        .animation(.easeOut(duration: 0.12), value: hovering)
         .help("\(item.name)\(item.isDownloaded ? "" : " — downloads on first use")")
         .task(id: item.id) {
             loadThumbnail()
@@ -275,14 +301,14 @@ private struct SystemWallpaperCellView: View {
                 }
             }
 
-            LinearGradient(colors: [.clear, .black.opacity(0.4)], startPoint: .center, endPoint: .bottom)
+            LinearGradient(colors: [.clear, .black.opacity(0.5)], startPoint: .center, endPoint: .bottom)
 
             if isBusy {
                 VStack(spacing: 6) {
                     if let fraction = downloadFraction {
                         Text("DOWNLOADING \(Int(fraction * 100))%")
-                            .font(Design.mono(9, .semibold))
-                            .tracking(1.2)
+                            .font(Design.font(9, weight: .bold))
+                            .tracking(1.0)
                             .foregroundStyle(.white)
                         ProgressView(value: fraction)
                             .progressViewStyle(.linear)
@@ -290,8 +316,8 @@ private struct SystemWallpaperCellView: View {
                             .frame(maxWidth: 90)
                     } else {
                         Text("APPLYING…")
-                            .font(Design.mono(9, .semibold))
-                            .tracking(1.2)
+                            .font(Design.font(9, weight: .bold))
+                            .tracking(1.0)
                             .foregroundStyle(.white)
                         ProgressView()
                             .controlSize(.small)
@@ -299,7 +325,7 @@ private struct SystemWallpaperCellView: View {
                     }
                 }
             } else {
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     chip(symbol: "macbook", label: desktopChipLabel) { perform(onUseDesktop) }
                     chip(symbol: "lock.display", label: "LOCK") { perform(onUseLock) }
                 }
@@ -309,27 +335,26 @@ private struct SystemWallpaperCellView: View {
                 VStack {
                     HStack {
                         if item.kind == .aerial {
-                            Label("LIVE", systemImage: "play.fill")
-                                .font(Design.mono(8, .bold))
-                                .tracking(1)
-                                .foregroundStyle(.white.opacity(0.95))
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 3)
-                                .background(.black.opacity(0.6), in: Capsule())
+                            Text("[ LIVE 4K ]")
+                                .font(Design.font(8, weight: .bold))
+                                .tracking(0.6)
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 3, style: .continuous))
                         }
                         Spacer()
                         if !item.isDownloaded {
                             Image(systemName: "arrow.down.circle")
                                 .font(.system(size: 10))
-                                .foregroundStyle(.white.opacity(0.85))
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 3)
-                                .background(.black.opacity(0.6), in: Capsule())
+                                .foregroundStyle(.white.opacity(0.9))
+                                .padding(4)
+                                .background(Color.black.opacity(0.75), in: Circle())
                         }
                     }
                     Spacer()
                 }
-                .padding(7)
+                .padding(6)
                 .opacity(hovering ? 0 : 1)
             }
 
@@ -342,16 +367,16 @@ private struct SystemWallpaperCellView: View {
                     .opacity(hovering ? 0 : 1)
             }
         }
-        .frame(height: 92)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .aspectRatio(16/10, contentMode: .fit)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .strokeBorder(
-                    isCurrentDesktop ? Color.white.opacity(0.8) : Design.hairline,
+                    isCurrentDesktop ? Color.white.opacity(0.8) : (hovering ? Design.hairlineStrong : Design.hairline),
                     lineWidth: isCurrentDesktop ? 1.5 : 1
                 )
         )
-        .contentShape(RoundedRectangle(cornerRadius: 10))
+        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
     private func loadThumbnail() {
@@ -374,17 +399,21 @@ private struct SystemWallpaperCellView: View {
 
     private func chip(symbol: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Label(label, systemImage: symbol)
-                .font(Design.mono(9, .semibold))
-                .tracking(0.8)
-                .labelStyle(.titleAndIcon)
-                .foregroundStyle(.white)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(.black.opacity(0.65), in: Capsule())
-                .overlay(Capsule().strokeBorder(Color.white.opacity(0.25), lineWidth: 1))
+            HStack(spacing: 4) {
+                Image(systemName: symbol)
+                    .font(.system(size: 9, weight: .bold))
+                Text(label)
+                    .font(Design.font(9, weight: .bold))
+                    .tracking(0.8)
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4.5)
+            .background(Color.black.opacity(0.8), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous).strokeBorder(Color.white.opacity(0.25), lineWidth: 0.5))
         }
         .buttonStyle(.plain)
+        .pointerOnHover()
         .disabled(isBusy)
     }
 }

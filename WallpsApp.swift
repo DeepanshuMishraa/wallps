@@ -5,7 +5,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var attachAttempts = 0
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        FontRegistrar.registerBundledFonts()
         MenuBarManager.shared.install()
         attachWindowDelegate()
         let event = NSAppleEventManager.shared().currentAppleEvent
@@ -33,23 +32,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 struct WallpsApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
-    init() {
-        FontRegistrar.registerBundledFonts()
-    }
-
     var body: some Scene {
         WindowGroup {
             ContentView()
         }
         .windowStyle(.hiddenTitleBar)
-        .windowResizability(.contentSize)
-        .defaultSize(width: 520, height: 640)
+        .windowResizability(.contentMinSize)
+        .defaultSize(width: 660, height: 700)
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button("Set wallpapers") {
+                Button("Set Wallpapers") {
                     NotificationCenter.default.post(name: .setWallpapers, object: nil)
                 }
                 .keyboardShortcut("s", modifiers: [.command, .shift])
+
+                Button("Preview Lock Screen") {
+                    NotificationCenter.default.post(name: .previewLockScreen, object: nil)
+                }
+                .keyboardShortcut("p", modifiers: [.command, .shift])
             }
         }
     }
@@ -57,6 +57,7 @@ struct WallpsApp: App {
 
 extension Notification.Name {
     static let setWallpapers = Notification.Name("WallpsSetWallpapers")
+    static let previewLockScreen = Notification.Name("WallpsPreviewLockScreen")
     static let refreshWallpaperPreviews = Notification.Name("WallpsRefreshPreviews")
     static let openMainWindow = Notification.Name("WallpsOpenMainWindow")
     static let wallpsStateChanged = Notification.Name("WallpsStateChanged")

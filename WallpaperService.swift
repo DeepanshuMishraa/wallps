@@ -123,6 +123,36 @@ enum WallpaperService {
         }
     }
 
+    static func lockScreen() {
+        // Method 1: SACLockScreenImmediate in login.framework
+        typealias SACLockScreenImmediateFunc = @convention(c) () -> Int32
+        if let handle = dlopen("/System/Library/PrivateFrameworks/login.framework/Versions/Current/login", RTLD_LAZY) {
+            if let sym = dlsym(handle, "SACLockScreenImmediate") {
+                let lockFunc = unsafeBitCast(sym, to: SACLockScreenImmediateFunc.self)
+                _ = lockFunc()
+                dlclose(handle)
+                return
+            }
+            dlclose(handle)
+        }
+
+        // Method 2: CGSession -suspend
+        let cgSession = "/System/Library/CoreServices/Menu Extras/User.menu/Contents/Resources/CGSession"
+        if FileManager.default.isExecutableFile(atPath: cgSession) {
+            let task = Process()
+            task.executableURL = URL(fileURLWithPath: cgSession)
+            task.arguments = ["-suspend"]
+            if (try? task.run()) != nil {
+                return
+            }
+        }
+
+        // Method 3: AppleScript key command (⌃⌘Q)
+        let script = NSAppleScript(source: "tell application \"System Events\" to keystroke \"q\" using {command down, control down}")
+        var errorInfo: NSDictionary?
+        script?.executeAndReturnError(&errorInfo)
+    }
+
     private static func shellQuote(_ value: String) -> String {
         "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
