@@ -17,7 +17,7 @@ enum ImportTarget {
     var subtitle: String {
         switch self {
         case .desktop: return "Active workspace background"
-        case .login: return "Lock screen wallpaper"
+        case .login: return "Lock screen background"
         }
     }
 
@@ -43,24 +43,32 @@ struct ContentView: View {
     @State private var didAutoReapply = false
     @State private var isPaused = false
     @State private var showingBrowser = false
+    @State private var showingSettings = false
 
     var body: some View {
-        HStack(spacing: 0) {
-            // Left Control Sidebar (Clean, Unified)
-            leftSidebar
-                .frame(width: 240)
-                .background(Design.surface)
+        VStack(spacing: 0) {
+            headerBar
 
-            // Right Stage Area (Perfect spacing, clean alignment)
-            VStack(spacing: 0) {
-                topBar
-                mainStage
-                bottomStatusBar
+            Divider()
+                .background(Design.hairline)
+
+            GeometryReader { geo in
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 20) {
+                        displayStage(availableWidth: geo.size.width)
+                    }
+                    .padding(24)
+                    .frame(minHeight: geo.size.height - 56, alignment: .center)
+                }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Design.background)
+
+            Divider()
+                .background(Design.hairline)
+
+            bottomControlDeck
         }
-        .frame(minWidth: 720, idealWidth: 840, minHeight: 480, idealHeight: 560)
+        .background(Design.background)
+        .frame(minWidth: 620, idealWidth: 720, minHeight: 480, idealHeight: 540)
         .background(WindowChromeConfigurator())
         .fileImporter(
             isPresented: $isImporting,
@@ -135,59 +143,102 @@ struct ContentView: View {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.3"
     }
 
-    // MARK: - Left Sidebar
+    // MARK: - Header Bar
 
-    private var leftSidebar: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // App Identity
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text("Wallps")
-                        .font(Design.font(16, weight: .bold))
-                        .foregroundStyle(Design.ink)
+    private var headerBar: some View {
+        HStack(spacing: 12) {
+            // App Title & Status
+            HStack(spacing: 8) {
+                StatusDot(
+                    filled: true,
+                    isGlowing: !isPaused,
+                    customColor: isPaused ? Design.inkTertiary : (statusIsError ? Design.error : Design.success)
+                )
 
-                    Text("v\(appVersion)")
-                        .font(Design.font(9, weight: .medium))
-                        .foregroundStyle(Design.inkTertiary)
+                Text("Wallps")
+                    .font(Design.font(14, weight: .bold))
+                    .foregroundStyle(Design.ink)
+
+                Text("v\(appVersion)")
+                    .font(Design.font(9.5, weight: .medium))
+                    .foregroundStyle(Design.inkTertiary)
+
+                Text(isPaused ? "PAUSED" : "ACTIVE")
+                    .font(Design.font(8.5, weight: .bold))
+                    .tracking(0.8)
+                    .foregroundStyle(isPaused ? Design.inkTertiary : Design.success)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(
+                        (isPaused ? Design.surfaceRaised : Design.success.opacity(0.12)),
+                        in: RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    )
+            }
+
+            Spacer()
+
+            // Header Actions
+            HStack(spacing: 8) {
+                GhostIconButton(
+                    symbol: "sparkles.rectangle.stack",
+                    text: "Apple Catalog",
+                    help: "Browse Apple system wallpapers & dynamic live aerials"
+                ) {
+                    showingBrowser = true
                 }
 
-                HStack(spacing: 6) {
-                    StatusDot(
-                        filled: true,
-                        isGlowing: !isPaused,
-                        customColor: isPaused ? Design.inkTertiary : (statusIsError ? Design.error : Design.success)
+                // Settings Popover Button
+                Button {
+                    showingSettings.toggle()
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "gearshape")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    .foregroundStyle(showingSettings ? Design.ink : Design.inkSecondary)
+                    .frame(width: 28, height: 28)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(showingSettings ? Design.surfaceRaised : Design.surface)
                     )
-                    Text(isPaused ? "Engine Paused" : "Engine Active")
-                        .font(Design.font(9.5, weight: .bold))
-                        .foregroundStyle(isPaused ? Design.inkTertiary : Design.success)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .strokeBorder(showingSettings ? Design.hairlineStrong : Design.hairline, lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
+                .pointerOnHover()
+                .popover(isPresented: $showingSettings, arrowEdge: .bottom) {
+                    settingsPopoverView
                 }
             }
-            .padding(.horizontal, 24)
-            .padding(.top, 24)
-            .padding(.bottom, 24)
+        }
+        .padding(.horizontal, 20)
+        .frame(height: 52)
+        .background(Design.surface)
+    }
 
-            Divider()
-                .background(Design.hairline)
+    // MARK: - Settings Popover View
 
-            // Settings Section
-            VStack(alignment: .leading, spacing: 20) {
-                Text("SETTINGS")
-                    .font(Design.font(9, weight: .bold))
-                    .tracking(1.4)
-                    .foregroundStyle(Design.inkTertiary)
-                    .padding(.top, 24)
+    private var settingsPopoverView: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("PREFERENCES")
+                .font(Design.font(9.5, weight: .bold))
+                .tracking(1.4)
+                .foregroundStyle(Design.inkTertiary)
 
-                // Launch at Login
-                HStack {
+            VStack(spacing: 10) {
+                // Launch on boot
+                HStack(spacing: 12) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Launch on boot")
                             .font(Design.font(11, weight: .semibold))
                             .foregroundStyle(Design.ink)
-                        Text("Start automatically")
+                        Text("Starts silently in the background on login.")
                             .font(Design.font(9.5, weight: .regular))
                             .foregroundStyle(Design.inkTertiary)
                     }
-                    Spacer()
+                    Spacer(minLength: 16)
                     Toggle("", isOn: $launchAtLogin)
                         .labelsHidden()
                         .toggleStyle(PillToggleStyle())
@@ -202,17 +253,20 @@ struct ContentView: View {
                     showingLoginPrompt = true
                 }
 
+                Divider()
+                    .background(Design.hairline)
+
                 // Pause sync
-                HStack {
+                HStack(spacing: 12) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Pause switching")
+                        Text("Pause sync")
                             .font(Design.font(11, weight: .semibold))
                             .foregroundStyle(Design.ink)
-                        Text("Deactivate engine")
+                        Text("Temporarily suspend wallpaper pairing.")
                             .font(Design.font(9.5, weight: .regular))
                             .foregroundStyle(Design.inkTertiary)
                     }
-                    Spacer()
+                    Spacer(minLength: 16)
                     Toggle("", isOn: $isPaused)
                         .labelsHidden()
                         .toggleStyle(PillToggleStyle())
@@ -224,107 +278,30 @@ struct ContentView: View {
                     }
                 }
             }
-            .padding(.horizontal, 24)
-
-            Spacer()
-
-            // Action Buttons
-            VStack(spacing: 8) {
-                GhostIconButton(
-                    symbol: "sparkles.rectangle.stack",
-                    text: "Explore Catalog",
-                    help: "Browse Apple system wallpapers & dynamic live aerials"
-                ) {
-                    showingBrowser = true
-                }
-                .frame(maxWidth: .infinity)
-
-                PrimaryActionButton(
-                    title: isApplying ? "Applying…" : "Apply Pair (⌘↵)",
-                    isLoading: isApplying,
-                    keyEquivalent: .return
-                ) {
-                    applyWallpapers()
-                }
-                .frame(maxWidth: .infinity)
-                .disabled(desktopImage == nil || loginImage == nil || isApplying || isPaused)
-            }
-            .padding(16)
         }
-        .overlay(
-            HStack {
-                Spacer()
-                Rectangle()
-                    .fill(Design.hairline)
-                    .frame(width: 1)
-            }
-        )
+        .padding(16)
+        .frame(width: 280)
+        .background(Design.surface)
     }
 
-    // MARK: - Right Top Bar
+    // MARK: - Display Stage (Responsive 2-Viewport Grid)
 
-    private var topBar: some View {
-        HStack {
-            Text("STUDIO WORKSPACE")
-                .font(Design.font(9.5, weight: .bold))
-                .tracking(1.4)
-                .foregroundStyle(Design.inkTertiary)
+    @ViewBuilder
+    private func displayStage(availableWidth: CGFloat) -> some View {
+        if availableWidth >= 520 {
+            HStack(spacing: 20) {
+                wallpaperViewport(target: .desktop, image: desktopImage)
+                    .frame(maxWidth: .infinity)
 
-            Spacer()
-        }
-        .padding(.horizontal, 32)
-        .frame(height: 56)
-        .overlay(
-            VStack {
-                Spacer()
-                Rectangle()
-                    .fill(Design.hairline)
-                    .frame(height: 1)
+                wallpaperViewport(target: .login, image: loginImage)
+                    .frame(maxWidth: .infinity)
             }
-        )
-    }
-
-    // MARK: - Right Main Stage
-
-    private var mainStage: some View {
-        HStack(spacing: 24) {
-            wallpaperViewport(target: .desktop, image: desktopImage)
-                .frame(maxWidth: .infinity)
-
-            wallpaperViewport(target: .login, image: loginImage)
-                .frame(maxWidth: .infinity)
-        }
-        .padding(.horizontal, 32)
-        .padding(.vertical, 32)
-    }
-
-    // MARK: - Right Bottom Status Bar
-
-    private var bottomStatusBar: some View {
-        HStack(spacing: 12) {
-            StatusDot(
-                filled: true,
-                isGlowing: isApplying,
-                customColor: statusIsError ? Design.error : (isPaused ? Design.inkTertiary : (isApplying ? Design.accent : Design.success))
-            )
-
-            Text(statusText)
-                .font(Design.font(10, weight: .medium))
-                .foregroundStyle(statusIsError ? Design.error : Design.inkSecondary)
-                .lineLimit(1)
-
-            Spacer()
-        }
-        .padding(.horizontal, 32)
-        .frame(height: 40)
-        .overlay(
-            VStack {
-                Rectangle()
-                    .fill(Design.hairline)
-                    .frame(height: 1)
-                Spacer()
+        } else {
+            VStack(spacing: 20) {
+                wallpaperViewport(target: .desktop, image: desktopImage)
+                wallpaperViewport(target: .login, image: loginImage)
             }
-        )
+        }
     }
 
     private func wallpaperViewport(target: ImportTarget, image: URL?) -> some View {
@@ -351,14 +328,49 @@ struct ContentView: View {
         )
     }
 
+    // MARK: - Bottom Control Deck
+
+    private var bottomControlDeck: some View {
+        HStack(spacing: 16) {
+            // Status Info
+            HStack(spacing: 8) {
+                StatusDot(
+                    filled: true,
+                    isGlowing: isApplying,
+                    customColor: statusIsError ? Design.error : (isPaused ? Design.inkTertiary : (isApplying ? Design.accent : Design.success))
+                )
+
+                Text(statusText)
+                    .font(Design.font(10.5, weight: .medium))
+                    .foregroundStyle(statusIsError ? Design.error : Design.inkSecondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 12)
+
+            // Primary Apply Button
+            PrimaryActionButton(
+                title: isApplying ? "Applying…" : "Apply Wallpapers (⌘↵)",
+                isLoading: isApplying,
+                keyEquivalent: .return
+            ) {
+                applyWallpapers()
+            }
+            .disabled(desktopImage == nil || loginImage == nil || isApplying || isPaused)
+        }
+        .padding(.horizontal, 20)
+        .frame(height: 54)
+        .background(Design.surface)
+    }
+
     private var statusText: String {
         if let message = statusMessage {
             return message
         }
         if isPaused {
-            return "Sync is paused. Desktop and Lock Screen will not automatically sync."
+            return "Sync is paused · System Settings has control"
         }
-        return "System paired. Lock your screen (⌃⌘Q) to see the lock screen wallpaper."
+        return "Wallpapers armed · Press ⌘↵ to apply"
     }
 
     private func chooseImage(for target: ImportTarget) {
@@ -455,42 +467,43 @@ private struct WallpaperViewportView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Viewport Header Info
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: 10) {
+            // Viewport Header
+            HStack(spacing: 8) {
                 Image(systemName: target.symbol)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Design.inkSecondary)
 
                 Text(target.title.uppercased())
-                    .font(Design.font(10, weight: .bold))
+                    .font(Design.font(11, weight: .bold))
                     .tracking(1.2)
                     .foregroundStyle(Design.ink)
 
                 if isVideo {
-                    Text("LIVE")
+                    Text("LIVE AERIAL")
                         .font(Design.font(8.5, weight: .bold))
+                        .tracking(0.6)
                         .foregroundStyle(Design.accentInk)
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 1.5)
-                        .background(Design.accent, in: RoundedRectangle(cornerRadius: 3, style: .continuous))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Design.accent, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
                 }
 
                 Spacer()
 
                 if let url {
                     Text(url.lastPathComponent)
-                        .font(Design.font(9.5, weight: .medium))
+                        .font(Design.font(10, weight: .regular))
                         .foregroundStyle(Design.inkTertiary)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                        .frame(maxWidth: 160, alignment: .trailing)
+                        .frame(maxWidth: 140, alignment: .trailing)
                 }
             }
 
-            // Aspect 16:10 Bezel Display Frame
+            // Display Frame (16:10 aspect ratio)
             ZStack {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(Design.surface)
 
                 GeometryReader { geo in
@@ -498,34 +511,37 @@ private struct WallpaperViewportView: View {
                 }
 
                 if url != nil {
-                    // Smooth subtle ambient dimming overlay
+                    // Ambient gradient overlay for action buttons contrast
                     LinearGradient(
                         colors: [
                             Color.clear,
-                            Color.black.opacity(0.4)
+                            Color.black.opacity(0.45)
                         ],
                         startPoint: .center,
                         endPoint: .bottom
                     )
                     .allowsHitTesting(false)
 
-                    // Floating hardware action bar
+                    // Floating Glass Actions Bar
                     VStack {
                         Spacer()
-                        HStack(spacing: 6) {
+                        HStack(spacing: 8) {
                             Button(action: onClear) {
                                 HStack(spacing: 4) {
                                     Image(systemName: "xmark")
-                                        .font(.system(size: 8.5, weight: .bold))
+                                        .font(.system(size: 9, weight: .bold))
                                     Text("CLEAR")
-                                        .font(Design.font(9, weight: .bold))
+                                        .font(Design.font(9.5, weight: .bold))
                                         .tracking(0.6)
                                 }
                                 .foregroundStyle(Color.white)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4.5)
-                                .background(Color.black.opacity(0.8), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
-                                .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous).strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5))
+                                .padding(.horizontal, 9)
+                                .padding(.vertical, 5)
+                                .background(Color.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                        .strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5)
+                                )
                             }
                             .buttonStyle(.plain)
                             .pointerOnHover()
@@ -535,33 +551,37 @@ private struct WallpaperViewportView: View {
                             Button(action: onPick) {
                                 HStack(spacing: 4) {
                                     Image(systemName: "photo")
-                                        .font(.system(size: 8.5, weight: .bold))
+                                        .font(.system(size: 9, weight: .bold))
                                     Text("CHANGE")
-                                        .font(Design.font(9, weight: .bold))
+                                        .font(Design.font(9.5, weight: .bold))
                                         .tracking(0.6)
                                 }
                                 .foregroundStyle(Color.white)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4.5)
-                                .background(Color.black.opacity(0.8), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
-                                .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous).strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(Color.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                        .strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5)
+                                )
                             }
                             .buttonStyle(.plain)
                             .pointerOnHover()
                         }
-                        .padding(8)
+                        .padding(10)
                     }
                 }
             }
             .aspectRatio(16/10, contentMode: .fit)
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .strokeBorder(
                         dropping ? Design.accent : (hovering ? Design.hairlineStrong : Design.hairline),
                         lineWidth: dropping ? 2 : 1
                     )
             )
+            .shadow(color: Color.black.opacity(0.08), radius: 8, y: 3)
             .onHover { hovering = $0 }
             .animation(.easeOut(duration: 0.12), value: hovering)
             .onDrop(of: [UTType.fileURL.identifier], isTargeted: $dropping) { providers in
@@ -581,6 +601,12 @@ private struct WallpaperViewportView: View {
                 await reloadPreview()
             }
         }
+        .padding(14)
+        .background(Design.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Design.hairline, lineWidth: 1)
+        )
     }
 
     @ViewBuilder
@@ -615,23 +641,23 @@ private struct WallpaperViewportView: View {
 
     private var emptyState: some View {
         Button(action: onPick) {
-            VStack(spacing: 8) {
+            VStack(spacing: 10) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(Design.surfaceRaised)
-                        .frame(width: 32, height: 32)
+                        .frame(width: 36, height: 36)
                     Image(systemName: "plus")
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(Design.inkSecondary)
                 }
 
-                VStack(spacing: 2) {
+                VStack(spacing: 3) {
                     Text("Select \(target.title)")
-                        .font(Design.font(11, weight: .bold))
+                        .font(Design.font(11.5, weight: .bold))
                         .foregroundStyle(Design.ink)
 
-                    Text("Drop file or click to select")
-                        .font(Design.font(9, weight: .regular))
+                    Text("Drop image or click to choose")
+                        .font(Design.font(9.5, weight: .regular))
                         .foregroundStyle(Design.inkTertiary)
                 }
             }

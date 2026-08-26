@@ -39,7 +39,7 @@ struct WallpsApp: App {
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentMinSize)
-        .defaultSize(width: 660, height: 700)
+        .defaultSize(width: 720, height: 500)
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("Set Wallpapers") {
