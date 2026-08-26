@@ -172,6 +172,67 @@
     .site-links a { color: inherit; }
     .site-links a:hover { color: #fafafa; }
 
+    .terminal-block {
+      max-width: 580px;
+      margin: 28px auto 0;
+      text-align: left;
+    }
+    .terminal-note {
+      font-size: 12px;
+      color: #a1a1aa;
+      margin-bottom: 8px;
+      line-height: 1.5;
+    }
+    .terminal-cmd {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 14px;
+      background: #141417;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: border-color 150ms ease, background 150ms ease;
+    }
+    .terminal-cmd:hover {
+      background: #18181c;
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+    .cmd-text {
+      font-size: 12px;
+      color: #e4e4e7;
+      user-select: all;
+      overflow-x: auto;
+      white-space: nowrap;
+      font-family: inherit;
+    }
+    .copy-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 5px;
+      padding: 4px 8px;
+      color: #d4d4d8;
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: background 150ms ease, color 150ms ease;
+    }
+    .terminal-cmd:hover .copy-btn {
+      background: rgba(255, 255, 255, 0.14);
+      color: #fafafa;
+    }
+    .copy-btn.copied {
+      background: rgba(52, 211, 153, 0.15);
+      border-color: rgba(52, 211, 153, 0.3);
+      color: #34d399;
+    }
+
     @media (prefers-reduced-motion: reduce) {
       main > * { animation: none; opacity: 1; }
       .button { transition: none; }
@@ -190,6 +251,20 @@
       Download for macOS
     </a>
     <p class="meta">macOS 13+ &middot; Free &middot; Open source &middot; <a href="https://github.com/DeepanshuMishraa/wallps">GitHub</a></p>
+    
+    <div class="terminal-block">
+      <p class="terminal-note">Note: As the app is not notarized yet, run this in Terminal after moving to Applications:</p>
+      <div class="terminal-cmd" onclick="copyCmd(this)" title="Click to copy command">
+        <code class="cmd-text">sudo xattr -rd com.apple.quarantine /Applications/Wallps.app/</code>
+        <button type="button" class="copy-btn" aria-label="Copy command">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+          <span class="copy-status">Copy</span>
+        </button>
+      </div>
+    </div>
     <section class="details" aria-labelledby="what-is-wallps">
       <h2 id="what-is-wallps">What is Wallps?</h2>
       <p>Wallps is a small macOS menu bar app for people who want a different image on their desktop and lock screen. macOS normally renders both surfaces from the desktop wallpaper; Wallps keeps the two choices separate and reapplies them when the Mac locks, wakes, sleeps, logs out, or restarts.</p>
@@ -221,6 +296,23 @@
       "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
       "codeRepository": "https://github.com/DeepanshuMishraa/wallps",
       "author": { "@type": "Person", "name": "Deepanshu Mishraa", "url": "https://github.com/DeepanshuMishraa" }
+    }
+  </script>
+  <script>
+    function copyCmd(el) {
+      const text = "sudo xattr -rd com.apple.quarantine /Applications/Wallps.app/";
+      navigator.clipboard.writeText(text).then(() => {
+        const btn = el.querySelector('.copy-btn');
+        const status = el.querySelector('.copy-status');
+        if (btn && status) {
+          btn.classList.add('copied');
+          status.textContent = 'Copied!';
+          setTimeout(() => {
+            btn.classList.remove('copied');
+            status.textContent = 'Copy';
+          }, 2000);
+        }
+      });
     }
   </script>
 </body>

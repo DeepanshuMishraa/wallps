@@ -40,7 +40,7 @@ Download the [latest release](https://github.com/DeepanshuMishraa/wallps/release
 The app is not signed or notarized, so Gatekeeper blocks it. Approve it once:
 
 ```sh
-sudo xattr -dr com.apple.quarantine /Applications/Wallps.app
+sudo xattr -rd com.apple.quarantine /Applications/Wallps.app/
 ```
 
 Then open Wallps, pick an image for Desktop and one for Lock screen, press
