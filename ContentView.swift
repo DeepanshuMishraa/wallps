@@ -131,7 +131,7 @@ struct ContentView: View {
         .background(WindowChromeConfigurator())
         .fileImporter(
             isPresented: $isImporting,
-            allowedContentTypes: [.image],
+            allowedContentTypes: [.image, .movie, .mpeg4Movie, .quickTimeMovie],
             allowsMultipleSelection: false
         ) { result in
             guard case .success(let urls) = result, let url = urls.first else { return }
@@ -427,13 +427,17 @@ struct ContentView: View {
         Task {
             isApplying = true
             do {
-                _ = try await WallpaperService.apply(login: loginImage)
-                WallpaperSwitcher.shared.arm(desktop: desktopImage, login: loginImage)
+                _ = try await WallpaperSwitcher.shared.applyAndArm(
+                    desktop: DesktopSource.infer(for: desktopImage),
+                    login: LoginSource.infer(for: loginImage),
+                    legacyInstall: true
+                )
+                let liveLock = LoginSource.infer(for: loginImage) == .video(loginImage)
 
                 // Trigger Minimal Top Center Toast
                 toastTask?.cancel()
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
-                    toastMessage = "Wallpapers applied"
+                    toastMessage = liveLock ? "Live lock screen set" : "Wallpapers applied"
                 }
                 toastTask = Task {
                     try? await Task.sleep(nanoseconds: 2_500_000_000)
@@ -496,8 +500,11 @@ struct ContentView: View {
         Task {
             isApplying = true
             do {
-                _ = try await WallpaperService.apply(login: savedLogin, legacyInstall: false)
-                WallpaperSwitcher.shared.arm(desktop: savedDesktop, login: savedLogin)
+                _ = try await WallpaperSwitcher.shared.applyAndArm(
+                    desktop: DesktopSource.infer(for: savedDesktop),
+                    login: LoginSource.infer(for: savedLogin),
+                    legacyInstall: false
+                )
             } catch {}
             isApplying = false
         }
@@ -645,6 +652,10 @@ private struct WallpaperViewportView: View {
                 provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
                     guard let data = item as? Data,
                           let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
+                    if url.isVideoFile {
+                        onAcceptImage(url)
+                        return
+                    }
                     WallpaperImageStore.load(url) { image in
                         if image != nil {
                             onAcceptImage(url)
@@ -712,7 +723,7 @@ private struct WallpaperViewportView: View {
                         .font(Design.font(11.5, weight: .bold))
                         .foregroundStyle(Design.ink)
 
-                    Text("Drop image or click to choose")
+                    Text("Drop image or video, or click to choose")
                         .font(Design.font(9.5, weight: .regular))
                         .foregroundStyle(Design.inkTertiary)
                 }

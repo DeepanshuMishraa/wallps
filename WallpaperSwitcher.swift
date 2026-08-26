@@ -8,7 +8,9 @@ final class WallpaperSwitcher {
 
     var savedDesktopURL: URL? { desktopSource?.url }
     var savedDesktopSource: DesktopSource? { desktopSource }
-    var savedLoginURL: URL? { loginImageURL }
+    var savedLoginURL: URL? { loginSource?.url }
+    var savedLoginSource: LoginSource? { loginSource }
+    var loginImageURL: URL? { loginSource?.url }
 
     var isPaused: Bool {
         didSet {
@@ -24,7 +26,7 @@ final class WallpaperSwitcher {
 
     private let defaults = UserDefaults.standard
     private var desktopSource: DesktopSource?
-    private var loginImageURL: URL?
+    private var loginSource: LoginSource?
     private var expectedSystemURLs: [UInt32: URL] = [:]
     private var pendingAdoptionURL: URL?
     private var pendingAdoptionSince: Date?
@@ -41,42 +43,59 @@ final class WallpaperSwitcher {
             desktopSource = DesktopSource.from(kindString: kind, path: path)
         }
         if let path = defaults.string(forKey: "WallpsLoginImagePath") {
-            loginImageURL = URL(fileURLWithPath: path)
+            let kind = defaults.string(forKey: "WallpsLoginSourceKind") ?? "image"
+            loginSource = LoginSource.from(kindString: kind, path: path)
         }
         isPaused = defaults.bool(forKey: "WallpsPaused")
         applyState()
     }
 
-    func arm(desktop: URL, login: URL) {
+    func arm(desktop: URL, login: LoginSource) {
         arm(desktop: .infer(for: desktop), login: login)
     }
 
-    func arm(desktop: DesktopSource, login: URL) {
+    func arm(desktop: DesktopSource, login: LoginSource) {
         desktopSource = desktop
-        loginImageURL = login
+        loginSource = login
         defaults.set(desktop.url.path, forKey: "WallpsDesktopImagePath")
         defaults.set(desktop.kindString, forKey: "WallpsDesktopSourceKind")
-        defaults.set(login.path, forKey: "WallpsLoginImagePath")
+        defaults.set(login.url.path, forKey: "WallpsLoginImagePath")
+        defaults.set(login.kindString, forKey: "WallpsLoginSourceKind")
         applyState()
         postStateChanged()
     }
 
     func applyState() {
         guard !isPaused else { return }
-        guard hasValidChoices, let login = loginImageURL, let desktop = desktopSource else { return }
-        setSystemWallpaperTracked(login)
+        guard hasValidChoices, let login = loginSource, let desktop = desktopSource else { return }
+        switch login {
+        case .image(let url):
+            setSystemWallpaperTracked(url)
+        case .video:
+            break
+        }
         canvas.show(source: desktop)
         startReconciliation()
     }
 
     /// Applies a new pair chosen in-app (browser or cards) and arms it.
     @MainActor
-    func applyAndArm(desktop: DesktopSource?, login: URL?, legacyInstall: Bool = true) async throws -> String {
+    func applyAndArm(desktop: DesktopSource?, login: LoginSource?, legacyInstall: Bool = true) async throws -> String {
         guard !isPaused else { throw WallpaperSwitcherError.paused }
         let effectiveLogin = try login ?? requireLogin()
         let effectiveDesktop = try desktop ?? requireDesktop()
-        let message = try await WallpaperService.apply(login: effectiveLogin, legacyInstall: legacyInstall)
-        arm(desktop: effectiveDesktop, login: effectiveLogin)
+        let message: String
+        let armedLogin: LoginSource
+        switch effectiveLogin {
+        case .image(let url):
+            message = try await WallpaperService.apply(login: url, legacyInstall: legacyInstall)
+            armedLogin = effectiveLogin
+        case .video(let url):
+            let activated = try await LiveWallpaperManager.shared.setLiveLockScreen(videoURL: url)
+            message = "Live lock screen set (\(activated.lastPathComponent))"
+            armedLogin = .video(activated)
+        }
+        arm(desktop: effectiveDesktop, login: armedLogin)
         return message
     }
 
@@ -87,18 +106,27 @@ final class WallpaperSwitcher {
         guard !didReapplyAtLaunch else { return }
         didReapplyAtLaunch = true
         guard !isPaused else { return }
-        guard hasValidChoices, let login = loginImageURL, let desktop = desktopSource else { return }
+        guard hasValidChoices, let login = loginSource else { return }
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             Task {
-                _ = try? await WallpaperService.apply(login: login, legacyInstall: false)
+                switch login {
+                case .image(let url):
+                    _ = try? await WallpaperService.apply(login: url, legacyInstall: false)
+                case .video(let url):
+                    try? await LiveWallpaperManager.shared.reactivateAerial(for: url)
+                }
                 self.applyState()
             }
             // The OS re-applies its own wallpaper shortly after login; hold
-            // the lock image again a couple of times so it sticks.
+            // the static lock image again a couple of times so it sticks.
+            guard case .image = self.loginSource else { return }
             for delay in [2.0, 8.0] {
                 DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                    guard let self, !self.isPaused, self.hasValidChoices, let login = self.loginImageURL else { return }
+                    guard let self,
+                          !self.isPaused,
+                          self.hasValidChoices,
+                          case .image(let login) = self.loginSource else { return }
                     self.setSystemWallpaperTracked(login)
                 }
             }
@@ -108,6 +136,9 @@ final class WallpaperSwitcher {
     func restoreDesktopImage() {
         stopReconciliation()
         canvas.tearDown()
+        // A live lock screen is the system wallpaper itself — restoring the
+        // static desktop image here would kill the animation on the lock.
+        if case .video? = loginSource { return }
         switch desktopSource {
         case .image(let url):
             if FileManager.default.fileExists(atPath: url.path) {
@@ -127,9 +158,14 @@ final class WallpaperSwitcher {
     /// made from System Settings instead of reverting them.
     func reconcile() {
         guard !isPaused else { return }
-        guard hasValidChoices, let login = loginImageURL else { return }
+        guard hasValidChoices else { return }
         canvas.reconcile()
 
+        guard case .image(let loginURL)? = loginSource else { return }
+        reconcileStaticLock(loginURL)
+    }
+
+    private func reconcileStaticLock(_ login: URL) {
         var externalCandidate: URL?
         for screen in NSScreen.screens {
             guard let raw = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
@@ -221,8 +257,8 @@ final class WallpaperSwitcher {
     }
 
     @MainActor
-    private func requireLogin() throws -> URL {
-        if let login = loginImageURL, FileManager.default.fileExists(atPath: login.path) {
+    private func requireLogin() throws -> LoginSource {
+        if let login = loginSource, FileManager.default.fileExists(atPath: login.url.path) {
             return login
         }
         throw WallpaperSwitcherError.missingLockImage

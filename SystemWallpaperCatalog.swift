@@ -31,11 +31,55 @@ enum DesktopSource: Equatable {
     }
 
     static func infer(for url: URL) -> DesktopSource {
-        let videoExtensions = ["mov", "mp4", "m4v"]
-        if videoExtensions.contains(url.pathExtension.lowercased()) {
+        if url.isVideoFile {
             return .video(url)
         }
         return .image(url)
+    }
+}
+
+/// What feeds the lock screen. Images are held as the system wallpaper
+/// (static); videos are registered as system aerials so macOS plays them
+/// natively on the lock screen.
+enum LoginSource: Equatable {
+    case image(URL)
+    case video(URL)
+
+    var url: URL {
+        switch self {
+        case .image(let url): return url
+        case .video(let url): return url
+        }
+    }
+
+    var kindString: String {
+        switch self {
+        case .image: return "image"
+        case .video: return "video"
+        }
+    }
+
+    static func from(kindString: String, path: String) -> LoginSource? {
+        let url = URL(fileURLWithPath: path)
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        switch kindString {
+        case "video": return .video(url)
+        case "image": return .image(url)
+        default: return nil
+        }
+    }
+
+    static func infer(for url: URL) -> LoginSource {
+        if url.isVideoFile {
+            return .video(url)
+        }
+        return .image(url)
+    }
+}
+
+extension URL {
+    var isVideoFile: Bool {
+        ["mov", "mp4", "m4v"].contains(pathExtension.lowercased())
     }
 }
 
@@ -90,7 +134,7 @@ enum SystemWallpaperCatalog {
     private static let desktopPicturesDirectory = URL(fileURLWithPath: "/System/Library/Desktop Pictures")
     private static let aerialResourcesDirectory = URL(fileURLWithPath:
         "/System/Library/PrivateFrameworks/WallpaperAerialAssets.framework/Resources")
-    private static let appleAerialVideosDirectory = FileManager.default.homeDirectoryForCurrentUser
+    static let appleAerialVideosDirectory = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Application Support/com.apple.wallpaper/aerials/videos", isDirectory: true)
 
     private static var inMemoryCatalog: [SystemWallpaperItem]?

@@ -190,6 +190,7 @@ struct SystemWallpaperBrowserView: View {
                         isCurrentDesktop: appliedTo(item, saved: WallpaperSwitcher.shared.savedDesktopURL),
                         isCurrentLock: appliedTo(item, saved: WallpaperSwitcher.shared.savedLoginURL),
                         desktopChipLabel: item.kind == .aerial ? "DESKTOP · \(aerialMode.title)" : "DESKTOP",
+                        lockChipLabel: item.kind == .aerial ? "LOCK · \(aerialMode.title)" : "LOCK",
                         onUseDesktop: { await use(item, for: .desktop) },
                         onUseLock: { await use(item, for: .login) }
                     )
@@ -213,13 +214,18 @@ struct SystemWallpaperBrowserView: View {
 
     /// Whether `item` is the currently applied wallpaper for desktop or lock.
     /// Aerials applied as stills live under the posters directory, so both the
-    /// local content URL and the generated poster are considered.
+    /// local content URL and the generated poster are considered. A live lock
+    /// screen is armed to the system-aerial copy of the video, which keeps the
+    /// item's asset identity (basename) even though the path differs.
     private func appliedTo(_ item: SystemWallpaperItem, saved: URL?) -> Bool {
         guard let saved = saved?.standardizedFileURL else { return false }
         let poster = SystemWallpaperCatalog.postersDirectory
             .appendingPathComponent("\(SystemWallpaperCatalog.sanitized(item.id))-poster.png")
         let candidates = [item.localContentURL, poster].compactMap { $0?.standardizedFileURL }
-        return candidates.contains(saved)
+        if candidates.contains(saved) { return true }
+        let savedBase = saved.deletingPathExtension().lastPathComponent
+        let itemBase = item.localContentURL?.deletingPathExtension().lastPathComponent ?? item.id
+        return savedBase == itemBase
     }
 
     private func presentToast(_ message: String) {
@@ -270,19 +276,26 @@ struct SystemWallpaperBrowserView: View {
                 }
                 _ = try await WallpaperSwitcher.shared.applyAndArm(desktop: source, login: nil)
             case .login:
-                let lockImageURL: URL
-                if item.kind == .aerial {
-                    guard let poster = await SystemWallpaperCatalog.posterFrame(
-                        forVideoAt: contentURL,
-                        preferredID: item.id
-                    ) else {
-                        throw WallpaperDownloadError.extractionFailed(itemName: item.name)
-                    }
-                    lockImageURL = poster
+                if item.kind == .aerial && aerialMode == .live {
+                    _ = try await WallpaperSwitcher.shared.applyAndArm(
+                        desktop: nil,
+                        login: .video(contentURL)
+                    )
                 } else {
-                    lockImageURL = contentURL
+                    let lockImageURL: URL
+                    if item.kind == .aerial {
+                        guard let poster = await SystemWallpaperCatalog.posterFrame(
+                            forVideoAt: contentURL,
+                            preferredID: item.id
+                        ) else {
+                            throw WallpaperDownloadError.extractionFailed(itemName: item.name)
+                        }
+                        lockImageURL = poster
+                    } else {
+                        lockImageURL = contentURL
+                    }
+                    _ = try await WallpaperSwitcher.shared.applyAndArm(desktop: nil, login: .image(lockImageURL))
                 }
-                _ = try await WallpaperSwitcher.shared.applyAndArm(desktop: nil, login: lockImageURL)
             }
 
             let targetName = target == .desktop ? "Desktop" : "Lock Screen"
@@ -311,6 +324,7 @@ private struct SystemWallpaperCellView: View {
     let isCurrentDesktop: Bool
     let isCurrentLock: Bool
     var desktopChipLabel: String = "DESKTOP"
+    var lockChipLabel: String = "LOCK"
     let onUseDesktop: () async -> Void
     let onUseLock: () async -> Void
 
@@ -392,7 +406,7 @@ private struct SystemWallpaperCellView: View {
             } else {
                 HStack(spacing: 6) {
                     chip(symbol: "macbook", label: desktopChipLabel, active: isCurrentDesktop) { perform(onUseDesktop) }
-                    chip(symbol: "lock.display", label: "LOCK", active: isCurrentLock) { perform(onUseLock) }
+                    chip(symbol: "lock.display", label: lockChipLabel, active: isCurrentLock) { perform(onUseLock) }
                 }
                 .opacity(hovering ? 1 : 0)
                 .scaleEffect(hovering ? 1 : 0.94)
