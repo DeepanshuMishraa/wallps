@@ -46,27 +46,21 @@ struct ContentView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            // Left Control Column (38%)
-            leftControlPanel
-                .frame(width: 250)
+            // Left Control Sidebar (Clean, Unified)
+            leftSidebar
+                .frame(width: 240)
                 .background(Design.surface)
-                .overlay(
-                    GeometryReader { geo in
-                        HStack {
-                            Spacer()
-                            Rectangle()
-                                .fill(Design.hairline)
-                                .frame(width: 1)
-                        }
-                    }
-                )
 
-            // Right Visual Stage (62%)
-            rightVisualStage
-                .frame(maxWidth: .infinity)
+            // Right Stage Area (Perfect spacing, clean alignment)
+            VStack(spacing: 0) {
+                topBar
+                mainStage
+                bottomStatusBar
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Design.background)
         }
-        .background(Design.background)
-        .frame(minWidth: 680, idealWidth: 780, minHeight: 520, idealHeight: 580)
+        .frame(minWidth: 720, idealWidth: 840, minHeight: 480, idealHeight: 560)
         .background(WindowChromeConfigurator())
         .fileImporter(
             isPresented: $isImporting,
@@ -144,11 +138,11 @@ struct ContentView: View {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.3"
     }
 
-    // MARK: - Left Control Panel
+    // MARK: - Left Sidebar
 
-    private var leftControlPanel: some View {
+    private var leftSidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // App Title & Version Header
+            // App Identity
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text("Wallps")
@@ -156,7 +150,7 @@ struct ContentView: View {
                         .foregroundStyle(Design.ink)
 
                     Text("v\(appVersion)")
-                        .font(Design.font(9, weight: .semibold))
+                        .font(Design.font(9, weight: .medium))
                         .foregroundStyle(Design.inkTertiary)
                 }
 
@@ -171,78 +165,73 @@ struct ContentView: View {
                         .foregroundStyle(isPaused ? Design.inkTertiary : Design.success)
                 }
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, 24)
             .padding(.top, 24)
-            .padding(.bottom, 28)
+            .padding(.bottom, 24)
 
-            // Settings & Preferences Rows
+            Divider()
+                .background(Design.hairline)
+
+            // Settings Section
             VStack(alignment: .leading, spacing: 20) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("BEHAVIOR")
-                        .font(Design.font(9, weight: .bold))
-                        .tracking(1.4)
-                        .foregroundStyle(Design.inkTertiary)
+                Text("SETTINGS")
+                    .font(Design.font(9, weight: .bold))
+                    .tracking(1.4)
+                    .foregroundStyle(Design.inkTertiary)
+                    .padding(.top, 24)
 
-                    // Launch at Login Toggle
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Launch on boot")
-                                .font(Design.font(11, weight: .semibold))
-                                .foregroundStyle(Design.ink)
-                            Text("Auto-start engine")
-                                .font(Design.font(9, weight: .regular))
-                                .foregroundStyle(Design.inkTertiary)
-                        }
-                        Spacer()
-                        Toggle("", isOn: $launchAtLogin)
-                            .labelsHidden()
-                            .toggleStyle(PillToggleStyle())
+                // Launch at Login
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Launch on boot")
+                            .font(Design.font(11, weight: .semibold))
+                            .foregroundStyle(Design.ink)
+                        Text("Start automatically")
+                            .font(Design.font(9.5, weight: .regular))
+                            .foregroundStyle(Design.inkTertiary)
                     }
-                    .onAppear { launchAtLogin = LoginItemManager.isEnabled }
-                    .onChange(of: launchAtLogin) { enabled in
-                        guard enabled else {
-                            Task { try? LoginItemManager.disable() }
-                            return
-                        }
-                        guard !LoginItemManager.isEnabled else { return }
-                        showingLoginPrompt = true
+                    Spacer()
+                    Toggle("", isOn: $launchAtLogin)
+                        .labelsHidden()
+                        .toggleStyle(PillToggleStyle())
+                }
+                .onAppear { launchAtLogin = LoginItemManager.isEnabled }
+                .onChange(of: launchAtLogin) { enabled in
+                    guard enabled else {
+                        Task { try? LoginItemManager.disable() }
+                        return
                     }
+                    guard !LoginItemManager.isEnabled else { return }
+                    showingLoginPrompt = true
                 }
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("SERVICE STATE")
-                        .font(Design.font(9, weight: .bold))
-                        .tracking(1.4)
-                        .foregroundStyle(Design.inkTertiary)
-
-                    // Pause Switching Toggle
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Pause switching")
-                                .font(Design.font(11, weight: .semibold))
-                                .foregroundStyle(Design.ink)
-                            Text("Adopt system choices")
-                                .font(Design.font(9, weight: .regular))
-                                .foregroundStyle(Design.inkTertiary)
-                        }
-                        Spacer()
-                        Toggle("", isOn: $isPaused)
-                            .labelsHidden()
-                            .toggleStyle(PillToggleStyle())
+                // Pause sync
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Pause switching")
+                            .font(Design.font(11, weight: .semibold))
+                            .foregroundStyle(Design.ink)
+                        Text("Deactivate engine")
+                            .font(Design.font(9.5, weight: .regular))
+                            .foregroundStyle(Design.inkTertiary)
                     }
-                    .onChange(of: isPaused) { paused in
-                        WallpaperSwitcher.shared.isPaused = paused
-                        if !paused {
-                            syncCardsFromSwitcher()
-                        }
+                    Spacer()
+                    Toggle("", isOn: $isPaused)
+                        .labelsHidden()
+                        .toggleStyle(PillToggleStyle())
+                }
+                .onChange(of: isPaused) { paused in
+                    WallpaperSwitcher.shared.isPaused = paused
+                    if !paused {
+                        syncCardsFromSwitcher()
                     }
                 }
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, 24)
 
             Spacer()
 
-            // Footer Actions
+            // Action Buttons
             VStack(spacing: 8) {
                 GhostIconButton(
                     symbol: "sparkles.rectangle.stack",
@@ -263,76 +252,106 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity)
                 .disabled(desktopImage == nil || loginImage == nil || isApplying || isPaused)
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 24)
+            .padding(16)
         }
+        .overlay(
+            HStack {
+                Spacer()
+                Rectangle()
+                    .fill(Design.hairline)
+                    .frame(width: 1)
+            }
+        )
     }
 
-    // MARK: - Right Visual Stage (Asymmetrical Showcase Stage)
+    // MARK: - Right Top Bar
 
-    private var rightVisualStage: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            // Header Info Bar
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Wallpapers")
-                        .font(Design.font(13.5, weight: .bold))
-                        .foregroundStyle(Design.ink)
-                    Text(statusText)
-                        .font(Design.font(10.5, weight: .regular))
-                        .foregroundStyle(statusIsError ? Design.error : Design.inkSecondary)
-                }
+    private var topBar: some View {
+        HStack {
+            Text("STUDIO WORKSPACE")
+                .font(Design.font(9.5, weight: .bold))
+                .tracking(1.4)
+                .foregroundStyle(Design.inkTertiary)
 
-                Spacer()
+            Spacer()
 
-                if loginImage != nil {
-                    Button {
-                        triggerLockScreenPreview()
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "eye")
-                                .font(.system(size: 9.5, weight: .semibold))
-                            Text("Preview (⌘⇧P)")
-                                .font(Design.font(10, weight: .bold))
-                                .tracking(0.6)
-                        }
-                        .foregroundStyle(Design.inkSecondary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4.5)
-                        .background(Design.surface, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .strokeBorder(Design.hairline, lineWidth: 1)
-                        )
+            if loginImage != nil {
+                Button {
+                    triggerLockScreenPreview()
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "eye")
+                            .font(.system(size: 9, weight: .semibold))
+                        Text("PREVIEW (⌘⇧P)")
+                            .font(Design.font(9.5, weight: .bold))
+                            .tracking(0.6)
                     }
-                    .buttonStyle(.plain)
-                    .pointerOnHover()
+                    .foregroundStyle(Design.inkSecondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Design.surface, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .strokeBorder(Design.hairline, lineWidth: 1)
+                    )
                 }
-            }
-            .padding(.horizontal, 32)
-            .padding(.top, 24)
-
-            // Staggered Asymmetric Viewport Stack
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 28) {
-                    // Staggered Desktop (Shifted left/right dynamically)
-                    HStack {
-                        wallpaperViewport(target: .desktop, image: desktopImage)
-                            .frame(maxWidth: 360)
-                        Spacer()
-                    }
-
-                    // Staggered Lock Screen
-                    HStack {
-                        Spacer()
-                        wallpaperViewport(target: .login, image: loginImage)
-                            .frame(maxWidth: 360)
-                    }
-                }
-                .padding(.horizontal, 32)
-                .padding(.bottom, 32)
+                .buttonStyle(.plain)
+                .pointerOnHover()
             }
         }
+        .padding(.horizontal, 32)
+        .frame(height: 56)
+        .overlay(
+            VStack {
+                Spacer()
+                Rectangle()
+                    .fill(Design.hairline)
+                    .frame(height: 1)
+            }
+        )
+    }
+
+    // MARK: - Right Main Stage
+
+    private var mainStage: some View {
+        HStack(spacing: 24) {
+            wallpaperViewport(target: .desktop, image: desktopImage)
+                .frame(maxWidth: .infinity)
+
+            wallpaperViewport(target: .login, image: loginImage)
+                .frame(maxWidth: .infinity)
+        }
+        .padding(.horizontal, 32)
+        .padding(.vertical, 32)
+    }
+
+    // MARK: - Right Bottom Status Bar
+
+    private var bottomStatusBar: some View {
+        HStack(spacing: 12) {
+            StatusDot(
+                filled: true,
+                isGlowing: isApplying,
+                customColor: statusIsError ? Design.error : (isPaused ? Design.inkTertiary : (isApplying ? Design.accent : Design.success))
+            )
+
+            Text(statusText)
+                .font(Design.font(10, weight: .medium))
+                .foregroundStyle(statusIsError ? Design.error : Design.inkSecondary)
+                .lineLimit(1)
+
+            Spacer()
+        }
+        .padding(.horizontal, 32)
+        .frame(height: 40)
+        .overlay(
+            VStack {
+                Rectangle()
+                    .fill(Design.hairline)
+                    .frame(height: 1)
+                Spacer()
+            }
+        )
     }
 
     private func wallpaperViewport(target: ImportTarget, image: URL?) -> some View {
@@ -369,9 +388,9 @@ struct ContentView: View {
             return message
         }
         if isPaused {
-            return "Paused · System Settings in control"
+            return "Sync is paused. Desktop and Lock Screen will not automatically sync."
         }
-        return "Armed · Press ⌘⇧P to preview lock screen"
+        return "System paired. Lock your screen (⌃⌘Q) to see the lock screen wallpaper."
     }
 
     private func chooseImage(for target: ImportTarget) {
