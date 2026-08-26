@@ -11,6 +11,51 @@ enum TemporalTranscoder {
     static let maxDurationSeconds: Double = 30
     private static let targetBitrate = 8_000_000
 
+    /// Detects Apple-style HEVC temporal scalability (`tscl`/`tsas` sample
+    /// groups) by scanning the video's `moov` box. Videos that already carry
+    /// them play reliably on the lock screen and do not need re-encoding.
+    static func hasTemporalScalability(at url: URL) -> Bool {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return false }
+        defer { try? handle.close() }
+        let fileSize = (try? handle.seekToEnd()) ?? 0
+
+        var offset: UInt64 = 0
+        while offset + 8 <= fileSize {
+            try? handle.seek(toOffset: offset)
+            guard let header = try? handle.read(upToCount: 8), header.count == 8 else { break }
+            var boxSize = UInt64(be32(header, 0))
+            let type = String(data: header[4...], encoding: .ascii) ?? ""
+            if boxSize == 1 {
+                guard let large = try? handle.read(upToCount: 8), large.count == 8 else { break }
+                boxSize = be64(large, 0)
+            } else if boxSize == 0 {
+                boxSize = fileSize - offset
+            }
+            guard boxSize >= 8, offset + boxSize <= fileSize else { break }
+            if type == "moov" {
+                let limit = min(boxSize - 8, 16 * 1024 * 1024)
+                if let moov = try? handle.read(upToCount: Int(limit)) {
+                    return moov.range(of: Data("tscl".utf8)) != nil
+                        && moov.range(of: Data("tsas".utf8)) != nil
+                }
+                return false
+            }
+            offset += boxSize
+        }
+        return false
+    }
+
+    private static func be32(_ data: Data, _ start: Int) -> UInt32 {
+        (UInt32(data[start]) << 24)
+            | (UInt32(data[start + 1]) << 16)
+            | (UInt32(data[start + 2]) << 8)
+            | UInt32(data[start + 3])
+    }
+
+    private static func be64(_ data: Data, _ start: Int) -> UInt64 {
+        (UInt64(be32(data, start)) << 32) | UInt64(be32(data, start + 4))
+    }
+
     static func transcode(input: URL, output: URL) throws {
         try? FileManager.default.removeItem(at: output)
 
@@ -25,6 +70,22 @@ enum TemporalTranscoder {
         let height = Int32(Int(track.naturalSize.height.rounded()))
         let fps = max(track.nominalFrameRate, 1)
         let clipDuration = min(asset.duration.seconds, maxDurationSeconds)
+
+        // The lock-screen ramp only needs smooth motion up to 60 fps. Capping
+        // there keeps high-frame-rate clips (e.g. 240 fps aerials) from
+        // exploding into tens of thousands of frames to re-encode.
+        let encodeFps = min(Double(fps), 60)
+        let frameSkip = max(1, Int((Double(fps) / encodeFps).rounded()))
+        // Encode at the source's own bit depth: 8-bit sources skip the costly
+        // per-frame 10-bit conversion with no visible quality difference.
+        let mediaFormat = (track.formatDescriptions as? [CMFormatDescription])?
+            .first
+            .map { CMFormatDescriptionGetMediaSubType($0) }
+        let is10BitSource = mediaFormat == kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
+            || mediaFormat == kCVPixelFormatType_420YpCbCr10BiPlanarFullRange
+        let readerPixelFormat: OSType = is10BitSource
+            ? kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
+            : kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
 
         // Streams compressed frames into a .mov; writer is created lazily on the
         // first sample so we can pass the encoder's source format description.
@@ -60,8 +121,8 @@ enum TemporalTranscoder {
         setProperty(kVTCompressionPropertyKey_RealTime, kCFBooleanFalse)
         setProperty(kVTCompressionPropertyKey_ProfileLevel, kVTProfileLevel_HEVC_Main10_AutoLevel)
         setProperty(kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanTrue)
-        setProperty(kVTCompressionPropertyKey_ExpectedFrameRate, NSNumber(value: Double(fps)))
-        setProperty(kVTCompressionPropertyKey_MaxKeyFrameInterval, NSNumber(value: Int(fps * 5)))
+        setProperty(kVTCompressionPropertyKey_ExpectedFrameRate, NSNumber(value: encodeFps))
+        setProperty(kVTCompressionPropertyKey_MaxKeyFrameInterval, NSNumber(value: Int(encodeFps * 5)))
         setProperty(kVTCompressionPropertyKey_AverageBitRate, NSNumber(value: targetBitrate))
         setProperty(kVTCompressionPropertyKey_ColorPrimaries, kCVImageBufferColorPrimaries_ITU_R_709_2)
         setProperty(kVTCompressionPropertyKey_TransferFunction, kCVImageBufferTransferFunction_ITU_R_709_2)
@@ -69,12 +130,12 @@ enum TemporalTranscoder {
         // Temporal scalability: two sub-layers so the ramp can drop the
         // enhancement layer without pausing playback.
         setProperty(kVTCompressionPropertyKey_AllowTemporalCompression, kCFBooleanTrue)
-        setProperty(kVTCompressionPropertyKey_BaseLayerFrameRate, NSNumber(value: Double(fps) / 2.0))
+        setProperty(kVTCompressionPropertyKey_BaseLayerFrameRate, NSNumber(value: encodeFps / 2.0))
         VTCompressionSessionPrepareToEncodeFrames(session)
 
         let reader = try AVAssetReader(asset: asset)
         let readerOutput = AVAssetReaderTrackOutput(track: track, outputSettings: [
-            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
+            kCVPixelBufferPixelFormatTypeKey as String: readerPixelFormat
         ])
         readerOutput.alwaysCopiesSampleData = false
         reader.add(readerOutput)
@@ -83,13 +144,16 @@ enum TemporalTranscoder {
             throw TemporalTranscodeError.readerStart(reader.status)
         }
 
+        var frameIndex = 0
         while let sampleBuffer = readerOutput.copyNextSampleBuffer() {
             guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { continue }
             let time = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
             if CMTimeGetSeconds(time) > clipDuration { break }
+            frameIndex += 1
+            if frameIndex % frameSkip != 0 { continue }
             var duration = CMSampleBufferGetDuration(sampleBuffer)
             if !duration.isValid || duration.value == 0 {
-                duration = CMTime(value: 1, timescale: Int32(fps.rounded()))
+                duration = CMTime(value: 1, timescale: Int32(encodeFps.rounded()))
             }
             VTCompressionSessionEncodeFrame(
                 session,

@@ -45,6 +45,11 @@ final class LiveWallpaperManager {
     private let categoryID = "WA000000-0000-4000-8000-000000000001"
     private let subcategoryID = "WA000000-0000-4000-8000-000000000002"
 
+    /// Maps source video path → "assetID|size|mtime" so a previously
+    /// transcoded video is reused instead of re-encoded on later applies.
+    private static let registryKey = "WallpsLiveAerialRegistry"
+    private let defaults = UserDefaults.standard
+
     private init() {}
 
     /// macOS 26 (Tahoe) hoisted the aerials catalog into the user's Application
@@ -85,25 +90,100 @@ final class LiveWallpaperManager {
             return destination
         }
 
-        // User video: register a fresh asset identity; transcode so the lock
-        // screen keeps animating across lock/unlock cycles.
+        // User video: register a fresh asset identity; transcode only when the
+        // clip lacks Apple's temporal-scalability sample groups (without them
+        // the lock screen freezes after the first unlock).
         let assetID = UUID().uuidString.uppercased()
         let destination = videosDir.appendingPathComponent("\(assetID).mov")
-        if fileManager.fileExists(atPath: destination.path) {
-            try fileManager.removeItem(at: destination)
-        }
-        try await Task.detached(priority: .userInitiated) {
-            try TemporalTranscoder.transcode(input: videoURL, output: destination)
-        }.value
-
         let thumbnailURL = thumbnailsDir.appendingPathComponent("\(assetID).png")
-        if !fileManager.fileExists(atPath: thumbnailURL.path) {
-            generateThumbnail(from: destination, to: thumbnailURL)
+
+        // Fast path 1: the exact same source file was registered before.
+        if let cached = registeredRegistration(for: videoURL) {
+            return try useExistingRegistration(cached, thumbnailURL: thumbnailURL)
+        }
+
+        // Fast path 2: the clip already carries temporal scalability — a plain
+        // copy is enough, no re-encode.
+        let needsTranscode = !TemporalTranscoder.hasTemporalScalability(at: videoURL)
+
+        // The thumbnail comes from the ORIGINAL clip, so it can be generated
+        // while the (possibly slow) transcode runs.
+        let thumbnailTask: Task<Void, Never>? = fileManager.fileExists(atPath: thumbnailURL.path)
+            ? nil
+            : Task.detached(priority: .utility) { [weak self] in
+                self?.generateThumbnail(from: videoURL, to: thumbnailURL)
+            }
+
+        if needsTranscode {
+            if fileManager.fileExists(atPath: destination.path) {
+                try fileManager.removeItem(at: destination)
+            }
+            try await Task.detached(priority: .userInitiated) {
+                try TemporalTranscoder.transcode(input: videoURL, output: destination)
+            }.value
+        } else {
+            if !fileManager.fileExists(atPath: destination.path) {
+                try fileManager.copyItem(at: videoURL, to: destination)
+            }
+        }
+        if let thumbnailTask {
+            await thumbnailTask.value
         }
 
         insertIntoManifest(assetID: assetID, videoURL: destination, thumbnailURL: thumbnailURL, name: name)
+        rememberRegistration(source: videoURL, assetID: assetID, name: name)
         try activateAerial(assetID: assetID)
         return destination
+    }
+
+    private func useExistingRegistration(
+        _ entry: RegisteredAerial,
+        thumbnailURL: URL
+    ) throws -> URL {
+        if !fileManager.fileExists(atPath: thumbnailURL.path) {
+            generateThumbnail(from: entry.videoURL, to: thumbnailURL)
+        }
+        insertIntoManifest(assetID: entry.assetID, videoURL: entry.videoURL, thumbnailURL: thumbnailURL, name: entry.name)
+        try activateAerial(assetID: entry.assetID)
+        return entry.videoURL
+    }
+
+    private struct RegisteredAerial {
+        let assetID: String
+        let videoURL: URL
+        let name: String
+    }
+
+    private func registeredRegistration(for source: URL) -> RegisteredAerial? {
+        guard fileManager.fileExists(atPath: source.path) else { return nil }
+        guard let raw = defaults.dictionary(forKey: Self.registryKey)?[source.path] as? String else {
+            return nil
+        }
+        let parts = raw.split(separator: "|", maxSplits: 3).map(String.init)
+        guard parts.count == 4,
+              let expectedSize = Int64(parts[1]),
+              let expectedMtime = TimeInterval(parts[2]) else {
+            return nil
+        }
+        let attributes = try? fileManager.attributesOfItem(atPath: source.path)
+        guard let size = (attributes?[.size] as? NSNumber)?.int64Value, size == expectedSize,
+              let mtime = (attributes?[.modificationDate] as? Date)?.timeIntervalSince1970,
+              abs(mtime - expectedMtime) < 1 else {
+            return nil
+        }
+        let videoURL = videosDir.appendingPathComponent("\(parts[0]).mov")
+        guard fileManager.fileExists(atPath: videoURL.path) else { return nil }
+        return RegisteredAerial(assetID: parts[0], videoURL: videoURL, name: parts[3])
+    }
+
+    private func rememberRegistration(source: URL, assetID: String, name: String?) {
+        let attributes = try? fileManager.attributesOfItem(atPath: source.path)
+        let size = (attributes?[.size] as? NSNumber)?.int64Value ?? -1
+        let mtime = (attributes?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? -1
+        let displayName = name ?? source.deletingPathExtension().lastPathComponent
+        var registry = defaults.dictionary(forKey: Self.registryKey) as? [String: String] ?? [:]
+        registry[source.path] = "\(assetID)|\(size)|\(mtime)|\(displayName)"
+        defaults.set(registry, forKey: Self.registryKey)
     }
 
     /// Re-asserts an already-registered live lock screen (e.g. after a reboot).
@@ -152,6 +232,11 @@ final class LiveWallpaperManager {
             "/Library/Application Support/com.apple.idleassetsd"
         ]
         return prefixes.contains { path.hasPrefix($0) }
+    }
+
+    private func makeThumbnailIfNeeded(videoURL: URL, outputURL: URL) {
+        guard !fileManager.fileExists(atPath: outputURL.path) else { return }
+        generateThumbnail(from: videoURL, to: outputURL)
     }
 
     // MARK: - manifest/entries.json
