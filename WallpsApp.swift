@@ -46,6 +46,11 @@ struct WallpsApp: App {
                     NotificationCenter.default.post(name: .setWallpapers, object: nil)
                 }
                 .keyboardShortcut("s", modifiers: [.command, .shift])
+
+                Button("Preview Lock Screen") {
+                    NotificationCenter.default.post(name: .previewLockScreen, object: nil)
+                }
+                .keyboardShortcut("p", modifiers: [.command, .shift])
             }
         }
     }
@@ -56,4 +61,5 @@ extension Notification.Name {
     static let refreshWallpaperPreviews = Notification.Name("WallpsRefreshPreviews")
     static let openMainWindow = Notification.Name("WallpsOpenMainWindow")
     static let wallpsStateChanged = Notification.Name("WallpsStateChanged")
+    static let previewLockScreen = Notification.Name("WallpsPreviewLockScreen")
 }
