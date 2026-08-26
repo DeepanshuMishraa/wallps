@@ -42,6 +42,7 @@ struct ContentView: View {
     @State private var isPaused = false
     @State private var showingBrowser = false
     @State private var showingSettings = false
+    @State private var hideDockIcon = false
     @State private var toastMessage: String?
     @State private var toastTask: Task<Void, Never>?
 
@@ -330,6 +331,34 @@ struct ContentView: View {
                     WallpaperSwitcher.shared.isPaused = paused
                     if !paused {
                         syncCardsFromSwitcher()
+                    }
+                }
+
+                Divider()
+                    .background(Design.hairline)
+
+                // Hide Dock icon
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Hide Dock icon")
+                            .font(Design.font(11, weight: .semibold))
+                            .foregroundStyle(Design.ink)
+                        Text("Keep Wallps out of the Dock")
+                            .font(Design.font(9.5, weight: .regular))
+                            .foregroundStyle(Design.inkTertiary)
+                    }
+                    Spacer(minLength: 16)
+                    Toggle("", isOn: $hideDockIcon)
+                        .labelsHidden()
+                        .toggleStyle(PillToggleStyle())
+                }
+                .onAppear { hideDockIcon = DockIconManager.isHidden }
+                .onChange(of: hideDockIcon) { hidden in
+                    DockIconManager.setHidden(hidden)
+                    if hidden {
+                        DispatchQueue.main.async {
+                            MenuBarManager.shared.showMainWindow()
+                        }
                     }
                 }
             }

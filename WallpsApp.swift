@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         MenuBarManager.shared.install()
+        DockIconManager.apply()
         WallpaperSwitcher.shared.reapplyAtLaunchIfNeeded()
         attachWindowDelegate()
         let event = NSAppleEventManager.shared().currentAppleEvent

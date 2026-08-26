@@ -32,10 +32,11 @@ final class MenuBarManager: NSObject, NSMenuDelegate {
     }
 
     func showMainWindow() {
-        NSApp.setActivationPolicy(.regular)
+        NSApp.setActivationPolicy(DockIconManager.isHidden ? .accessory : .regular)
         NSApp.unhide(nil)
         if let window = mainWindow ?? NSApp.windows.first(where: Self.isContentWindow) {
             window.makeKeyAndOrderFront(nil)
+            window.orderFrontRegardless()
             mainWindow = window
         }
         NSApp.activate(ignoringOtherApps: true)
