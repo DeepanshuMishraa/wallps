@@ -416,6 +416,34 @@ struct StatusDot: View {
     }
 }
 
+struct WallpsToast: View {
+    let message: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 11.5, weight: .bold))
+                .foregroundStyle(Design.success)
+
+            Text(message.uppercased())
+                .font(Design.font(9.5, weight: .bold))
+                .tracking(1.0)
+                .foregroundStyle(Design.ink)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 7)
+        .background(
+            Design.surface,
+            in: Capsule()
+        )
+        .overlay(
+            Capsule()
+                .strokeBorder(Design.hairlineStrong, lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.18), radius: 14, y: 6)
+    }
+}
+
 struct WindowChromeConfigurator: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView {
         let view = NSView()

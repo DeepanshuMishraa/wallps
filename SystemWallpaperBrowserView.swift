@@ -9,6 +9,8 @@ struct SystemWallpaperBrowserView: View {
     @State private var aerialMode: AerialMode = .live
     @State private var searchText = ""
     @State private var alert: WallpaperService.AlertMessage?
+    @State private var toastMessage: String?
+    @State private var toastTask: Task<Void, Never>?
 
     enum AerialMode: String, CaseIterable, Identifiable {
         case live
@@ -64,6 +66,24 @@ struct SystemWallpaperBrowserView: View {
         .task {
             FontRegistrar.registerBundledFonts()
             loadItemsFast()
+        }
+        .overlay(alignment: .top) {
+            if let message = toastMessage {
+                WallpsToast(message: message)
+                    .padding(.top, 12)
+                    .transition(
+                        .asymmetric(
+                            insertion: .move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.92)),
+                            removal: .move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.92))
+                        )
+                    )
+                    .zIndex(200)
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+                            toastMessage = nil
+                        }
+                    }
+            }
         }
     }
 
@@ -167,8 +187,8 @@ struct SystemWallpaperBrowserView: View {
                     SystemWallpaperCellView(
                         item: item,
                         downloadFraction: downloadCenter.progress[item.id],
-                        isCurrentDesktop: WallpaperSwitcher.shared.savedDesktopURL?.standardizedFileURL
-                            == item.localContentURL?.standardizedFileURL,
+                        isCurrentDesktop: appliedTo(item, saved: WallpaperSwitcher.shared.savedDesktopURL),
+                        isCurrentLock: appliedTo(item, saved: WallpaperSwitcher.shared.savedLoginURL),
                         desktopChipLabel: item.kind == .aerial ? "DESKTOP · \(aerialMode.title)" : "DESKTOP",
                         onUseDesktop: { await use(item, for: .desktop) },
                         onUseLock: { await use(item, for: .login) }
@@ -191,6 +211,31 @@ struct SystemWallpaperBrowserView: View {
         }
     }
 
+    /// Whether `item` is the currently applied wallpaper for desktop or lock.
+    /// Aerials applied as stills live under the posters directory, so both the
+    /// local content URL and the generated poster are considered.
+    private func appliedTo(_ item: SystemWallpaperItem, saved: URL?) -> Bool {
+        guard let saved = saved?.standardizedFileURL else { return false }
+        let poster = SystemWallpaperCatalog.postersDirectory
+            .appendingPathComponent("\(SystemWallpaperCatalog.sanitized(item.id))-poster.png")
+        let candidates = [item.localContentURL, poster].compactMap { $0?.standardizedFileURL }
+        return candidates.contains(saved)
+    }
+
+    private func presentToast(_ message: String) {
+        toastTask?.cancel()
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
+            toastMessage = message
+        }
+        toastTask = Task {
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
+                toastMessage = nil
+            }
+        }
+    }
+
     private enum ApplyTarget {
         case desktop
         case login
@@ -198,7 +243,14 @@ struct SystemWallpaperBrowserView: View {
 
     private func use(_ item: SystemWallpaperItem, for target: ApplyTarget) async {
         do {
+            let wasDownloaded = item.localContentURL != nil
             let contentURL = try await downloadCenter.ensureDownloaded(item)
+            
+            // The item struct we hold is now stale: reload the catalog so the
+            // downloaded badge appears without reopening the browser.
+            withAnimation(.easeOut(duration: 0.15)) {
+                items = SystemWallpaperCatalog.items(forceRefresh: true)
+            }
 
             switch target {
             case .desktop:
@@ -232,7 +284,18 @@ struct SystemWallpaperBrowserView: View {
                 }
                 _ = try await WallpaperSwitcher.shared.applyAndArm(desktop: nil, login: lockImageURL)
             }
+
+            let targetName = target == .desktop ? "Desktop" : "Lock Screen"
+            if wasDownloaded {
+                presentToast("Applied to \(targetName)")
+            } else {
+                presentToast("Downloaded and applied to \(targetName)")
+            }
+
             NotificationCenter.default.post(name: .wallpsStateChanged, object: nil)
+            withAnimation(.easeOut(duration: 0.15)) {
+                items = SystemWallpaperCatalog.items(forceRefresh: true)
+            }
         } catch {
             alert = WallpaperService.AlertMessage(
                 title: "Could not use \"\(item.name)\"",
@@ -246,6 +309,7 @@ private struct SystemWallpaperCellView: View {
     let item: SystemWallpaperItem
     let downloadFraction: Double?
     let isCurrentDesktop: Bool
+    let isCurrentLock: Bool
     var desktopChipLabel: String = "DESKTOP"
     let onUseDesktop: () async -> Void
     let onUseLock: () async -> Void
@@ -255,6 +319,7 @@ private struct SystemWallpaperCellView: View {
     @State private var applying = false
 
     private var isBusy: Bool { downloadFraction != nil || applying }
+    private var isActive: Bool { isCurrentDesktop || isCurrentLock }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -326,8 +391,8 @@ private struct SystemWallpaperCellView: View {
                 }
             } else {
                 HStack(spacing: 6) {
-                    chip(symbol: "macbook", label: desktopChipLabel) { perform(onUseDesktop) }
-                    chip(symbol: "lock.display", label: "LOCK") { perform(onUseLock) }
+                    chip(symbol: "macbook", label: desktopChipLabel, active: isCurrentDesktop) { perform(onUseDesktop) }
+                    chip(symbol: "lock.display", label: "LOCK", active: isCurrentLock) { perform(onUseLock) }
                 }
                 .opacity(hovering ? 1 : 0)
                 .scaleEffect(hovering ? 1 : 0.94)
@@ -358,7 +423,7 @@ private struct SystemWallpaperCellView: View {
                 .opacity(hovering ? 0 : 1)
             }
 
-            if isCurrentDesktop && !isBusy {
+            if isActive && !isBusy {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 13))
                     .foregroundStyle(Color.black, Color.white)
@@ -372,8 +437,8 @@ private struct SystemWallpaperCellView: View {
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .strokeBorder(
-                    isCurrentDesktop ? Color.white.opacity(0.8) : (hovering ? Design.hairlineStrong : Design.hairline),
-                    lineWidth: isCurrentDesktop ? 1.5 : 1
+                    isActive ? Color.white.opacity(0.8) : (hovering ? Design.hairlineStrong : Design.hairline),
+                    lineWidth: isActive ? 1.5 : 1
                 )
         )
         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -397,23 +462,29 @@ private struct SystemWallpaperCellView: View {
         }
     }
 
-    private func chip(symbol: String, label: String, action: @escaping () -> Void) -> some View {
+    private func chip(symbol: String, label: String, active: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 4) {
-                Image(systemName: symbol)
-                    .font(.system(size: 9, weight: .bold))
-                Text(label)
+                Image(systemName: active ? "checkmark" : symbol)
+                    .font(.system(size: 8.5, weight: .bold))
+                Text(active ? "APPLIED" : label)
                     .font(Design.font(9, weight: .bold))
-                    .tracking(0.8)
+                    .tracking(0.6)
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(active ? Design.accentInk : Color.white)
             .padding(.horizontal, 8)
             .padding(.vertical, 4.5)
-            .background(Color.black.opacity(0.8), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous).strokeBorder(Color.white.opacity(0.25), lineWidth: 0.5))
+            .background(
+                active ? Design.accent : Color.black.opacity(0.8),
+                in: RoundedRectangle(cornerRadius: 4, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .strokeBorder(active ? Color.clear : Color.white.opacity(0.25), lineWidth: 0.5)
+            )
         }
         .buttonStyle(.plain)
         .pointerOnHover()
-        .disabled(isBusy)
+        .disabled(active || isBusy)
     }
 }

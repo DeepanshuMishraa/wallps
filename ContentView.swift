@@ -59,13 +59,13 @@ struct ContentView: View {
                             HStack {
                                 Spacer()
                                 PrimaryActionButton(
-                                    title: isApplying ? "Applying…" : "Apply Wallpapers (⌘↵)",
+                                    title: isApplying ? "Applying…" : (isPairApplied ? "Applied" : "Apply Wallpapers (⌘↵)"),
                                     isLoading: isApplying,
-                                    keyEquivalent: .return
+                                    keyEquivalent: isPairApplied ? nil : .return
                                 ) {
                                     applyWallpapers()
                                 }
-                                .disabled(desktopImage == nil || loginImage == nil || isApplying || isPaused)
+                                .disabled(desktopImage == nil || loginImage == nil || isApplying || isPaused || isPairApplied)
                                 Spacer()
                             }
                             .padding(.top, 4)
@@ -81,40 +81,20 @@ struct ContentView: View {
 
             // Minimal Center-Top Toast Notification
             if let message = toastMessage {
-                HStack(spacing: 8) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 11.5, weight: .bold))
-                        .foregroundStyle(Design.success)
-
-                    Text(message.uppercased())
-                        .font(Design.font(9.5, weight: .bold))
-                        .tracking(1.0)
-                        .foregroundStyle(Design.ink)
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 7)
-                .background(
-                    Design.surface,
-                    in: Capsule()
-                )
-                .overlay(
-                    Capsule()
-                        .strokeBorder(Design.hairlineStrong, lineWidth: 1)
-                )
-                .shadow(color: Color.black.opacity(0.18), radius: 14, y: 6)
-                .padding(.top, 12)
-                .transition(
-                    .asymmetric(
-                        insertion: .move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.92)),
-                        removal: .move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.92))
+                WallpsToast(message: message)
+                    .padding(.top, 12)
+                    .transition(
+                        .asymmetric(
+                            insertion: .move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.92)),
+                            removal: .move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.92))
+                        )
                     )
-                )
-                .zIndex(200)
-                .onTapGesture {
-                    withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
-                        toastMessage = nil
+                    .zIndex(200)
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+                            toastMessage = nil
+                        }
                     }
-                }
             }
 
             // Smooth Settings Dropdown Overlay
@@ -438,6 +418,14 @@ struct ContentView: View {
             }
             isApplying = false
         }
+    }
+
+    private var isPairApplied: Bool {
+        guard let desktopImage, let loginImage else { return false }
+        let savedDesktop = WallpaperSwitcher.shared.savedDesktopURL
+        let savedLogin = WallpaperSwitcher.shared.savedLoginURL
+        return desktopImage.standardizedFileURL == savedDesktop?.standardizedFileURL &&
+               loginImage.standardizedFileURL == savedLogin?.standardizedFileURL
     }
 
     private func syncCardsFromSwitcher() {
