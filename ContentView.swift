@@ -42,9 +42,11 @@ struct ContentView: View {
     @State private var isPaused = false
     @State private var showingBrowser = false
     @State private var showingSettings = false
+    @State private var toastMessage: String?
+    @State private var toastTask: Task<Void, Never>?
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .top) {
             VStack(spacing: 0) {
                 headerBar
 
@@ -76,6 +78,44 @@ struct ContentView: View {
                 }
             }
             .background(Design.background)
+
+            // Minimal Center-Top Toast Notification
+            if let message = toastMessage {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 11.5, weight: .bold))
+                        .foregroundStyle(Design.success)
+
+                    Text(message.uppercased())
+                        .font(Design.font(9.5, weight: .bold))
+                        .tracking(1.0)
+                        .foregroundStyle(Design.ink)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 7)
+                .background(
+                    Design.surface,
+                    in: Capsule()
+                )
+                .overlay(
+                    Capsule()
+                        .strokeBorder(Design.hairlineStrong, lineWidth: 1)
+                )
+                .shadow(color: Color.black.opacity(0.18), radius: 14, y: 6)
+                .padding(.top, 12)
+                .transition(
+                    .asymmetric(
+                        insertion: .move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.92)),
+                        removal: .move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.92))
+                    )
+                )
+                .zIndex(200)
+                .onTapGesture {
+                    withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+                        toastMessage = nil
+                    }
+                }
+            }
 
             // Smooth Settings Dropdown Overlay
             if showingSettings {
@@ -380,6 +420,19 @@ struct ContentView: View {
             do {
                 _ = try await WallpaperService.apply(login: loginImage)
                 WallpaperSwitcher.shared.arm(desktop: desktopImage, login: loginImage)
+
+                // Trigger Minimal Top Center Toast
+                toastTask?.cancel()
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
+                    toastMessage = "Wallpapers applied"
+                }
+                toastTask = Task {
+                    try? await Task.sleep(nanoseconds: 2_500_000_000)
+                    guard !Task.isCancelled else { return }
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
+                        toastMessage = nil
+                    }
+                }
             } catch {
                 alert = WallpaperService.AlertMessage(title: "Wallpaper setup failed", message: error.localizedDescription)
             }
