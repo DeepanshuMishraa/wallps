@@ -2,11 +2,15 @@ import AppKit
 import CoreText
 import SwiftUI
 
-// MARK: - Font Registrar for Geist Mono
+// MARK: - Font Registrar for Spline Sans Mono
 
 enum FontRegistrar {
     private static var hasRegistered = false
-    private static let bundledFontName = "GeistMono-Variable"
+    private static let bundledFontNames = [
+        "SplineSansMono[wght]",
+        "SplineSansMono-Italic[wght]",
+        "GeistMono-Variable"
+    ]
 
     static func registerBundledFonts() {
         guard !hasRegistered else { return }
@@ -14,28 +18,30 @@ enum FontRegistrar {
 
         var fontURLs: [URL] = []
 
-        if let bundleNested = Bundle.main.url(
-            forResource: bundledFontName,
-            withExtension: "ttf",
-            subdirectory: "Resources/Fonts"
-        ) {
-            fontURLs.append(bundleNested)
-        }
+        for name in bundledFontNames {
+            if let bundleNested = Bundle.main.url(
+                forResource: name,
+                withExtension: "ttf",
+                subdirectory: "Resources/Fonts"
+            ) {
+                fontURLs.append(bundleNested)
+            }
 
-        if let bundleRoot = Bundle.main.url(forResource: bundledFontName, withExtension: "ttf") {
-            fontURLs.append(bundleRoot)
-        }
+            if let bundleRoot = Bundle.main.url(forResource: name, withExtension: "ttf") {
+                fontURLs.append(bundleRoot)
+            }
 
-        let userFontsURL = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Fonts")
-            .appendingPathComponent("\(bundledFontName).ttf")
-        if FileManager.default.fileExists(atPath: userFontsURL.path) {
-            fontURLs.append(userFontsURL)
-        }
+            let userFontsURL = FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent("Library/Fonts")
+                .appendingPathComponent("\(name).ttf")
+            if FileManager.default.fileExists(atPath: userFontsURL.path) {
+                fontURLs.append(userFontsURL)
+            }
 
-        let systemFontsURL = URL(fileURLWithPath: "/Library/Fonts/\(bundledFontName).ttf")
-        if FileManager.default.fileExists(atPath: systemFontsURL.path) {
-            fontURLs.append(systemFontsURL)
+            let systemFontsURL = URL(fileURLWithPath: "/Library/Fonts/\(name).ttf")
+            if FileManager.default.fileExists(atPath: systemFontsURL.path) {
+                fontURLs.append(systemFontsURL)
+            }
         }
 
         for url in fontURLs {
@@ -55,7 +61,7 @@ extension Color {
     }
 }
 
-// MARK: - Design Tokens (Billion-Dollar Precision Monospace Aesthetic)
+// MARK: - Design Tokens (Spline Sans Mono Aesthetic)
 
 enum Design {
     // ── High-Contrast Precision Monochromatic Palette ─────────────────
@@ -134,26 +140,28 @@ enum Design {
         dark: NSColor(calibratedRed: 1.00, green: 0.38, blue: 0.38, alpha: 1.0)
     )
 
-    // ── Typography: 100% Pure Geist Mono Everywhere ────────────────────
+    // ── Typography: 100% Pure Spline Sans Mono ────────────────────────
     static func font(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
         FontRegistrar.registerBundledFonts()
 
         let postScriptName: String
         switch weight {
-        case .ultraLight, .thin: postScriptName = "GeistMono-Thin"
-        case .light: postScriptName = "GeistMono-Light"
-        case .regular: postScriptName = "GeistMono-Regular"
-        case .medium: postScriptName = "GeistMono-Medium"
-        case .semibold: postScriptName = "GeistMono-SemiBold"
-        case .bold, .heavy, .black: postScriptName = "GeistMono-Bold"
-        default: postScriptName = "GeistMono-Regular"
+        case .ultraLight, .thin, .light: postScriptName = "SplineSansMonoRoman-Light"
+        case .regular: postScriptName = "SplineSansMono-Regular"
+        case .medium: postScriptName = "SplineSansMonoRoman-Medium"
+        case .semibold: postScriptName = "SplineSansMonoRoman-SemiBold"
+        case .bold, .heavy, .black: postScriptName = "SplineSansMonoRoman-Bold"
+        default: postScriptName = "SplineSansMono-Regular"
         }
 
         if NSFont(name: postScriptName, size: size) != nil {
             return .custom(postScriptName, size: size)
         }
-        if NSFont(name: "Geist Mono", size: size) != nil {
-            return .custom("Geist Mono", size: size).weight(weight)
+        if NSFont(name: "Spline Sans Mono", size: size) != nil {
+            return .custom("Spline Sans Mono", size: size).weight(weight)
+        }
+        if NSFont(name: "GeistMono-Regular", size: size) != nil {
+            return .custom("GeistMono-Regular", size: size)
         }
         return .system(size: size, weight: weight, design: .monospaced)
     }

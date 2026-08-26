@@ -35,8 +35,6 @@ struct ContentView: View {
     @State private var isImporting = false
     @State private var pendingTarget: ImportTarget = .desktop
     @State private var isApplying = false
-    @State private var statusMessage: String?
-    @State private var statusIsError = false
     @State private var alert: WallpaperService.AlertMessage?
     @State private var launchAtLogin = false
     @State private var showingLoginPrompt = false
@@ -46,29 +44,69 @@ struct ContentView: View {
     @State private var showingSettings = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            headerBar
+        ZStack {
+            VStack(spacing: 0) {
+                headerBar
 
-            Divider()
-                .background(Design.hairline)
+                GeometryReader { geo in
+                    ScrollView(showsIndicators: false) {
+                        VStack(spacing: 24) {
+                            displayStage(availableWidth: geo.size.width)
 
-            GeometryReader { geo in
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: 20) {
-                        displayStage(availableWidth: geo.size.width)
+                            // Centered Apply Button directly below wallpaper cards
+                            HStack {
+                                Spacer()
+                                PrimaryActionButton(
+                                    title: isApplying ? "Applying…" : "Apply Wallpapers (⌘↵)",
+                                    isLoading: isApplying,
+                                    keyEquivalent: .return
+                                ) {
+                                    applyWallpapers()
+                                }
+                                .disabled(desktopImage == nil || loginImage == nil || isApplying || isPaused)
+                                Spacer()
+                            }
+                            .padding(.top, 4)
+                        }
+                        .padding(.horizontal, 24)
+                        .padding(.top, 12)
+                        .padding(.bottom, 24)
+                        .frame(minHeight: geo.size.height, alignment: .center)
                     }
-                    .padding(24)
-                    .frame(minHeight: geo.size.height - 56, alignment: .center)
                 }
             }
+            .background(Design.background)
 
-            Divider()
-                .background(Design.hairline)
+            // Smooth Settings Dropdown Overlay
+            if showingSettings {
+                Color.black.opacity(0.15)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+                            showingSettings = false
+                        }
+                    }
 
-            bottomControlDeck
+                VStack {
+                    HStack {
+                        Spacer()
+                        settingsCard
+                            .padding(.trailing, 20)
+                            .padding(.top, 54)
+                    }
+                    Spacer()
+                }
+                .transition(
+                    .asymmetric(
+                        insertion: .opacity.combined(with: .scale(scale: 0.94, anchor: .topTrailing)),
+                        removal: .opacity.combined(with: .scale(scale: 0.94, anchor: .topTrailing))
+                    )
+                )
+                .zIndex(100)
+            }
         }
-        .background(Design.background)
-        .frame(minWidth: 620, idealWidth: 720, minHeight: 480, idealHeight: 540)
+        .frame(minWidth: 620, idealWidth: 720, minHeight: 460, idealHeight: 520)
         .background(WindowChromeConfigurator())
         .fileImporter(
             isPresented: $isImporting,
@@ -143,18 +181,12 @@ struct ContentView: View {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.3"
     }
 
-    // MARK: - Header Bar
+    // MARK: - Header Bar (No Bottom Border, No Green Dot)
 
     private var headerBar: some View {
         HStack(spacing: 12) {
-            // App Title & Status
-            HStack(spacing: 8) {
-                StatusDot(
-                    filled: true,
-                    isGlowing: !isPaused,
-                    customColor: isPaused ? Design.inkTertiary : (statusIsError ? Design.error : Design.success)
-                )
-
+            // App Title & Version (No green dot)
+            HStack(spacing: 6) {
                 Text("Wallps")
                     .font(Design.font(14, weight: .bold))
                     .foregroundStyle(Design.ink)
@@ -162,17 +194,6 @@ struct ContentView: View {
                 Text("v\(appVersion)")
                     .font(Design.font(9.5, weight: .medium))
                     .foregroundStyle(Design.inkTertiary)
-
-                Text(isPaused ? "PAUSED" : "ACTIVE")
-                    .font(Design.font(8.5, weight: .bold))
-                    .tracking(0.8)
-                    .foregroundStyle(isPaused ? Design.inkTertiary : Design.success)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(
-                        (isPaused ? Design.surfaceRaised : Design.success.opacity(0.12)),
-                        in: RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    )
             }
 
             Spacer()
@@ -187,45 +208,59 @@ struct ContentView: View {
                     showingBrowser = true
                 }
 
-                // Settings Popover Button
+                // Settings Toggle Button with Smooth Popover
                 Button {
-                    showingSettings.toggle()
-                } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: "gearshape")
-                            .font(.system(size: 11, weight: .semibold))
+                    withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+                        showingSettings.toggle()
                     }
-                    .foregroundStyle(showingSettings ? Design.ink : Design.inkSecondary)
-                    .frame(width: 28, height: 28)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(showingSettings ? Design.surfaceRaised : Design.surface)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .strokeBorder(showingSettings ? Design.hairlineStrong : Design.hairline, lineWidth: 1)
-                    )
+                } label: {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(showingSettings ? Design.ink : Design.inkSecondary)
+                        .frame(width: 28, height: 28)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(showingSettings ? Design.surfaceRaised : Design.surface)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .strokeBorder(showingSettings ? Design.hairlineStrong : Design.hairline, lineWidth: 1)
+                        )
                 }
                 .buttonStyle(.plain)
                 .pointerOnHover()
-                .popover(isPresented: $showingSettings, arrowEdge: .bottom) {
-                    settingsPopoverView
-                }
             }
         }
-        .padding(.horizontal, 20)
-        .frame(height: 52)
-        .background(Design.surface)
+        .padding(.horizontal, 24)
+        .frame(height: 50)
+        .background(Design.background)
     }
 
-    // MARK: - Settings Popover View
+    // MARK: - Settings Dropdown Card
 
-    private var settingsPopoverView: some View {
+    private var settingsCard: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("PREFERENCES")
-                .font(Design.font(9.5, weight: .bold))
-                .tracking(1.4)
-                .foregroundStyle(Design.inkTertiary)
+            HStack {
+                Text("PREFERENCES")
+                    .font(Design.font(9.5, weight: .bold))
+                    .tracking(1.4)
+                    .foregroundStyle(Design.inkTertiary)
+
+                Spacer()
+
+                Button {
+                    withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+                        showingSettings = false
+                    }
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 9.5, weight: .bold))
+                        .foregroundStyle(Design.inkTertiary)
+                        .padding(4)
+                }
+                .buttonStyle(.plain)
+                .pointerOnHover()
+            }
 
             VStack(spacing: 10) {
                 // Launch on boot
@@ -234,7 +269,7 @@ struct ContentView: View {
                         Text("Launch on boot")
                             .font(Design.font(11, weight: .semibold))
                             .foregroundStyle(Design.ink)
-                        Text("Starts silently in the background on login.")
+                        Text("Starts silently in background")
                             .font(Design.font(9.5, weight: .regular))
                             .foregroundStyle(Design.inkTertiary)
                     }
@@ -262,7 +297,7 @@ struct ContentView: View {
                         Text("Pause sync")
                             .font(Design.font(11, weight: .semibold))
                             .foregroundStyle(Design.ink)
-                        Text("Temporarily suspend wallpaper pairing.")
+                        Text("Temporarily suspend engine")
                             .font(Design.font(9.5, weight: .regular))
                             .foregroundStyle(Design.inkTertiary)
                     }
@@ -280,8 +315,13 @@ struct ContentView: View {
             }
         }
         .padding(16)
-        .frame(width: 280)
-        .background(Design.surface)
+        .frame(width: 270)
+        .background(Design.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(Design.hairlineStrong, lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.20), radius: 16, y: 8)
     }
 
     // MARK: - Display Stage (Responsive 2-Viewport Grid)
@@ -328,51 +368,6 @@ struct ContentView: View {
         )
     }
 
-    // MARK: - Bottom Control Deck
-
-    private var bottomControlDeck: some View {
-        HStack(spacing: 16) {
-            // Status Info
-            HStack(spacing: 8) {
-                StatusDot(
-                    filled: true,
-                    isGlowing: isApplying,
-                    customColor: statusIsError ? Design.error : (isPaused ? Design.inkTertiary : (isApplying ? Design.accent : Design.success))
-                )
-
-                Text(statusText)
-                    .font(Design.font(10.5, weight: .medium))
-                    .foregroundStyle(statusIsError ? Design.error : Design.inkSecondary)
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 12)
-
-            // Primary Apply Button
-            PrimaryActionButton(
-                title: isApplying ? "Applying…" : "Apply Wallpapers (⌘↵)",
-                isLoading: isApplying,
-                keyEquivalent: .return
-            ) {
-                applyWallpapers()
-            }
-            .disabled(desktopImage == nil || loginImage == nil || isApplying || isPaused)
-        }
-        .padding(.horizontal, 20)
-        .frame(height: 54)
-        .background(Design.surface)
-    }
-
-    private var statusText: String {
-        if let message = statusMessage {
-            return message
-        }
-        if isPaused {
-            return "Sync is paused · System Settings has control"
-        }
-        return "Wallpapers armed · Press ⌘↵ to apply"
-    }
-
     private func chooseImage(for target: ImportTarget) {
         pendingTarget = target
         isImporting = true
@@ -382,14 +377,10 @@ struct ContentView: View {
         guard let desktopImage, let loginImage else { return }
         Task {
             isApplying = true
-            statusMessage = "Applying wallpapers…"
-            statusIsError = false
             do {
-                statusMessage = try await WallpaperService.apply(login: loginImage)
+                _ = try await WallpaperService.apply(login: loginImage)
                 WallpaperSwitcher.shared.arm(desktop: desktopImage, login: loginImage)
             } catch {
-                statusMessage = "Could not apply wallpapers."
-                statusIsError = true
                 alert = WallpaperService.AlertMessage(title: "Wallpaper setup failed", message: error.localizedDescription)
             }
             isApplying = false
@@ -434,15 +425,10 @@ struct ContentView: View {
         guard desktopIsValid, loginIsValid, let savedDesktop, let savedLogin else { return }
         Task {
             isApplying = true
-            statusMessage = "Reapplying saved wallpapers…"
-            statusIsError = false
             do {
-                statusMessage = try await WallpaperService.apply(login: savedLogin, legacyInstall: false)
+                _ = try await WallpaperService.apply(login: savedLogin, legacyInstall: false)
                 WallpaperSwitcher.shared.arm(desktop: savedDesktop, login: savedLogin)
-            } catch {
-                statusMessage = "Could not reapply saved wallpapers."
-                statusIsError = true
-            }
+            } catch {}
             isApplying = false
         }
     }
