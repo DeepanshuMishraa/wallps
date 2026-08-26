@@ -433,6 +433,7 @@ struct ContentView: View {
                     legacyInstall: true
                 )
                 let liveLock = LoginSource.infer(for: loginImage) == .video(loginImage)
+                MenuBarManager.shared.reassertMainWindowIfVisible()
 
                 // Trigger Minimal Top Center Toast
                 toastTask?.cancel()
@@ -573,6 +574,28 @@ private struct WallpaperViewportView: View {
                     imageLayer(size: geo.size)
                 }
 
+                if dropping {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Design.accent.opacity(0.15))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .strokeBorder(Design.accent, lineWidth: 2)
+                        )
+                    VStack(spacing: 8) {
+                        Image(systemName: "arrow.down.circle.fill")
+                            .font(.system(size: 26, weight: .semibold))
+                            .foregroundStyle(Design.accentInk)
+                        Text("DROP TO SET \(target.title.uppercased())")
+                            .font(Design.font(11, weight: .bold))
+                            .tracking(1.2)
+                            .foregroundStyle(Design.accentInk)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.black.opacity(0.35))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .allowsHitTesting(false)
+                }
+
                 if url != nil {
                     // Ambient gradient overlay for action buttons contrast
                     LinearGradient(
@@ -647,19 +670,14 @@ private struct WallpaperViewportView: View {
             .shadow(color: Color.black.opacity(0.08), radius: 8, y: 3)
             .onHover { hovering = $0 }
             .animation(.easeOut(duration: 0.12), value: hovering)
-            .onDrop(of: [UTType.fileURL.identifier], isTargeted: $dropping) { providers in
+            .onDrop(
+                of: [.fileURL, .image, .movie, .heic],
+                isTargeted: $dropping
+            ) { providers in
                 guard let provider = providers.first else { return false }
-                provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
-                    guard let data = item as? Data,
-                          let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
-                    if url.isVideoFile {
-                        onAcceptImage(url)
-                        return
-                    }
-                    WallpaperImageStore.load(url) { image in
-                        if image != nil {
-                            onAcceptImage(url)
-                        }
+                Task {
+                    if let url = await Self.resolveDroppedFile(provider) {
+                        await MainActor.run { onAcceptImage(url) }
                     }
                 }
                 return true
@@ -756,6 +774,56 @@ private struct WallpaperViewportView: View {
                     }
                 }
             }
+        }
+    }
+
+    /// Resolves a dragged item to a file URL. Finder files arrive as file URLs;
+    /// images/videos dragged from browsers or other apps arrive as raw data and
+    /// are persisted into the Wallps Drops folder.
+    private static func resolveDroppedFile(_ provider: NSItemProvider) async -> URL? {
+        if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+            if let url = await withCheckedContinuation({ continuation in
+                provider.loadObject(ofClass: NSURL.self) { object, _ in
+                    continuation.resume(returning: object as? URL)
+                }
+            }) {
+                return url.standardizedFileURL
+            }
+            if let data = await loadData(provider, forTypeIdentifier: UTType.fileURL.identifier),
+               let url = URL(dataRepresentation: data, relativeTo: nil) {
+                return url.standardizedFileURL
+            }
+        }
+
+        let mediaType = provider.registeredTypeIdentifiers
+            .compactMap { UTType($0) }
+            .first { $0.conforms(to: .image) || $0.conforms(to: .movie) }
+        guard let mediaType,
+              let data = await loadData(provider, forTypeIdentifier: mediaType.identifier) else {
+            return nil
+        }
+        let isVideo = mediaType.conforms(to: .movie)
+        let ext = mediaType.preferredFilenameExtension ?? (isVideo ? "mov" : "png")
+        return persistDroppedData(data, ext: ext)
+    }
+
+    private static func loadData(_ provider: NSItemProvider, forTypeIdentifier typeIdentifier: String) async -> Data? {
+        await withCheckedContinuation { continuation in
+            provider.loadDataRepresentation(forTypeIdentifier: typeIdentifier) { data, _ in
+                continuation.resume(returning: data)
+            }
+        }
+    }
+
+    private static func persistDroppedData(_ data: Data, ext: String) -> URL? {
+        let directory = SystemWallpaperCatalog.dropsDirectory
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent("drop-\(UUID().uuidString.prefix(8)).\(ext)")
+        do {
+            try data.write(to: url, options: .atomic)
+            return url
+        } catch {
+            return nil
         }
     }
 }

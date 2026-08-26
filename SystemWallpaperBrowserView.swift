@@ -216,16 +216,30 @@ struct SystemWallpaperBrowserView: View {
     /// Aerials applied as stills live under the posters directory, so both the
     /// local content URL and the generated poster are considered. A live lock
     /// screen is armed to the system-aerial copy of the video, which keeps the
-    /// item's asset identity (basename) even though the path differs.
+    /// item's asset identity (basename) even though the path differs — but only
+    /// catalog-owned paths are trusted for basename matching, so a local
+    /// wallpaper never lights up unrelated items.
     private func appliedTo(_ item: SystemWallpaperItem, saved: URL?) -> Bool {
         guard let saved = saved?.standardizedFileURL else { return false }
         let poster = SystemWallpaperCatalog.postersDirectory
             .appendingPathComponent("\(SystemWallpaperCatalog.sanitized(item.id))-poster.png")
         let candidates = [item.localContentURL, poster].compactMap { $0?.standardizedFileURL }
         if candidates.contains(saved) { return true }
+        guard isCatalogOwned(saved) else { return false }
         let savedBase = saved.deletingPathExtension().lastPathComponent
         let itemBase = item.localContentURL?.deletingPathExtension().lastPathComponent ?? item.id
         return savedBase == itemBase
+    }
+
+    private func isCatalogOwned(_ url: URL) -> Bool {
+        let ownedDirectories = [
+            SystemWallpaperCatalog.postersDirectory,
+            SystemWallpaperCatalog.aerialsDirectory,
+            SystemWallpaperCatalog.dynamicDirectory,
+            SystemWallpaperCatalog.appleAerialVideosDirectory
+        ]
+        let path = url.standardizedFileURL.path
+        return ownedDirectories.contains { path.hasPrefix($0.standardizedFileURL.path) }
     }
 
     private func presentToast(_ message: String) {
@@ -299,6 +313,7 @@ struct SystemWallpaperBrowserView: View {
             }
 
             let targetName = target == .desktop ? "Desktop" : "Lock Screen"
+            MenuBarManager.shared.reassertMainWindowIfVisible()
             if wasDownloaded {
                 presentToast("Applied to \(targetName)")
             } else {

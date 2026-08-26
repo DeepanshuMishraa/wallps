@@ -131,6 +131,10 @@ enum SystemWallpaperCatalog {
         appSupportDirectory.appendingPathComponent("Posters", isDirectory: true)
     }
 
+    static var dropsDirectory: URL {
+        appSupportDirectory.appendingPathComponent("Drops", isDirectory: true)
+    }
+
     private static let desktopPicturesDirectory = URL(fileURLWithPath: "/System/Library/Desktop Pictures")
     private static let aerialResourcesDirectory = URL(fileURLWithPath:
         "/System/Library/PrivateFrameworks/WallpaperAerialAssets.framework/Resources")

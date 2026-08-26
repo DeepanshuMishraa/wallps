@@ -42,6 +42,16 @@ final class MenuBarManager: NSObject, NSMenuDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    /// Brings a still-visible main window back to the front without activating
+    /// the app. Used after wallpaper changes that reorder windows (live lock
+    /// activation restarts the wallpaper services). Hidden windows stay hidden.
+    func reassertMainWindowIfVisible() {
+        guard let window = mainWindow ?? NSApp.windows.first(where: Self.isContentWindow) else { return }
+        guard window.isVisible else { return }
+        mainWindow = window
+        window.orderFrontRegardless()
+    }
+
     func hideMainWindowQuietly() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
             guard let self else { return }
