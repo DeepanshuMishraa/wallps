@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         MenuBarManager.shared.install()
+        WallpaperSwitcher.shared.reapplyAtLaunchIfNeeded()
         attachWindowDelegate()
         let event = NSAppleEventManager.shared().currentAppleEvent
         if event == nil || event?.eventID != AEEventID(kAEOpenApplication) {
@@ -45,11 +46,6 @@ struct WallpsApp: App {
                     NotificationCenter.default.post(name: .setWallpapers, object: nil)
                 }
                 .keyboardShortcut("s", modifiers: [.command, .shift])
-
-                Button("Preview Lock Screen") {
-                    NotificationCenter.default.post(name: .previewLockScreen, object: nil)
-                }
-                .keyboardShortcut("p", modifiers: [.command, .shift])
             }
         }
     }
@@ -57,7 +53,6 @@ struct WallpsApp: App {
 
 extension Notification.Name {
     static let setWallpapers = Notification.Name("WallpsSetWallpapers")
-    static let previewLockScreen = Notification.Name("WallpsPreviewLockScreen")
     static let refreshWallpaperPreviews = Notification.Name("WallpsRefreshPreviews")
     static let openMainWindow = Notification.Name("WallpsOpenMainWindow")
     static let wallpsStateChanged = Notification.Name("WallpsStateChanged")

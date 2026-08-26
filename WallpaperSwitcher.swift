@@ -30,6 +30,10 @@ final class WallpaperSwitcher {
     private var pendingAdoptionSince: Date?
     private var reconcileTimer: Timer?
     private var workspaceObservers: [NSObjectProtocol] = []
+    private var didReapplyAtLaunch = false
+    private let launchDate = Date()
+
+    var hasReappliedAtLaunch: Bool { didReapplyAtLaunch }
 
     private init() {
         if let path = defaults.string(forKey: "WallpsDesktopImagePath") {
@@ -74,6 +78,31 @@ final class WallpaperSwitcher {
         let message = try await WallpaperService.apply(login: effectiveLogin, legacyInstall: legacyInstall)
         arm(desktop: effectiveDesktop, login: effectiveLogin)
         return message
+    }
+
+    /// Applies the saved pair at launch even when the main window stays
+    /// hidden (auto-start at login). Runs once per process; the UI side
+    /// (ContentView) checks `hasReappliedAtLaunch` to avoid a duplicate pass.
+    func reapplyAtLaunchIfNeeded() {
+        guard !didReapplyAtLaunch else { return }
+        didReapplyAtLaunch = true
+        guard !isPaused else { return }
+        guard hasValidChoices, let login = loginImageURL, let desktop = desktopSource else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            Task {
+                _ = try? await WallpaperService.apply(login: login, legacyInstall: false)
+                self.applyState()
+            }
+            // The OS re-applies its own wallpaper shortly after login; hold
+            // the lock image again a couple of times so it sticks.
+            for delay in [2.0, 8.0] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                    guard let self, !self.isPaused, self.hasValidChoices, let login = self.loginImageURL else { return }
+                    self.setSystemWallpaperTracked(login)
+                }
+            }
+        }
     }
 
     func restoreDesktopImage() {
@@ -128,6 +157,10 @@ final class WallpaperSwitcher {
         }
 
         if let candidate = externalCandidate {
+            // Right after launch (login) the OS re-applies its own wallpaper.
+            // Any difference inside this window is system settling, not a
+            // deliberate user change in System Settings — do not adopt it.
+            guard Date().timeIntervalSince(launchDate) > 15 else { return }
             if candidate != pendingAdoptionURL {
                 pendingAdoptionURL = candidate
                 pendingAdoptionSince = Date()
