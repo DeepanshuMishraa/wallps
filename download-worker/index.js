@@ -29,7 +29,9 @@ export default {
     object.writeHttpMetadata(headers);
     headers.set("etag", object.httpEtag);
     headers.set("content-disposition", `attachment; filename="${key}"`);
-    headers.set("cache-control", "public, max-age=31536000, immutable");
+    // Never cache the binary: a stale cached DMG looks exactly like the
+    // latest release and cannot be revalidated after a re-upload.
+    headers.set("cache-control", "no-store");
     headers.set("x-content-type-options", "nosniff");
 
     const pinned = PINNED[key];
