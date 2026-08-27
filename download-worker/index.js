@@ -2,9 +2,10 @@ const PINNED = {
   "Wallps-1.0.3-macos.dmg": "ffd1aac27f817a9421d991a0113ae438041a9461fb7faff161b20b92e5a64428",
   "Wallps-1.0.4-macos.dmg": "c99de3052c5d4591713a3cad144ca35baa6e3bcec3379f27add3f2ffc974d3ca",
   "Wallps-1.0.5-macos.dmg": "005effdcd3c965906a3e66e812515772d37ba612009e9b57f9b1fb8b66df12bd",
+  "Wallps-1.0.5-2-macos.dmg": "005effdcd3c965906a3e66e812515772d37ba612009e9b57f9b1fb8b66df12bd",
 };
 
-const ALLOWED_NAME = /^Wallps-\d+\.\d+\.\d+-macos\.dmg(\.sha256)?$/;
+const ALLOWED_NAME = /^Wallps-\d+\.\d+\.\d+(-\d+)?-macos\.dmg(\.sha256)?$/;
 
 async function sha256Hex(data) {
   const digest = await crypto.subtle.digest("SHA-256", data);
