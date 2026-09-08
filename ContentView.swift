@@ -101,6 +101,7 @@ struct ContentView: View {
                 Color.black.opacity(0.15)
                     .ignoresSafeArea()
                     .contentShape(Rectangle())
+                    .zIndex(0)
                     .onTapGesture {
                         withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
                             showingSettings = false
@@ -359,6 +360,8 @@ struct ContentView: View {
         .padding(16)
         .frame(width: 270)
         .tintedGlassSurface(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .onTapGesture { }
         .shadow(color: Color.black.opacity(0.20), radius: 16, y: 8)
     }
 
