@@ -54,7 +54,10 @@ struct SystemWallpaperBrowserView: View {
             header
             grid
         }
-        .background(Design.background)
+        .background {
+            WindowChromeConfigurator()
+                .ignoresSafeArea()
+        }
         .frame(minWidth: 640, idealWidth: 840, maxWidth: .infinity, minHeight: 480, idealHeight: 600, maxHeight: .infinity)
         .alert(item: $alert) { alert in
             Alert(

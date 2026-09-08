@@ -78,8 +78,6 @@ struct ContentView: View {
                     }
                 }
             }
-            .background(Design.background)
-
             // Minimal Center-Top Toast Notification
             if let message = toastMessage {
                 WallpsToast(message: message)
@@ -128,7 +126,10 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 620, idealWidth: 720, minHeight: 460, idealHeight: 520)
-        .background(WindowChromeConfigurator())
+        .background {
+            WindowChromeConfigurator()
+                .ignoresSafeArea()
+        }
         .fileImporter(
             isPresented: $isImporting,
             allowedContentTypes: [.image, .movie, .mpeg4Movie, .quickTimeMovie],
@@ -254,7 +255,6 @@ struct ContentView: View {
         }
         .padding(.horizontal, 24)
         .frame(height: 50)
-        .background(Design.background)
     }
 
     // MARK: - Settings Dropdown Card
@@ -365,11 +365,7 @@ struct ContentView: View {
         }
         .padding(16)
         .frame(width: 270)
-        .background(Design.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Design.hairlineStrong, lineWidth: 1)
-        )
+        .glassSurface(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .shadow(color: Color.black.opacity(0.20), radius: 16, y: 8)
     }
 
@@ -623,11 +619,7 @@ private struct WallpaperViewportView: View {
                                 .foregroundStyle(Color.white)
                                 .padding(.horizontal, 9)
                                 .padding(.vertical, 5)
-                                .background(Color.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                        .strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5)
-                                )
+                                .glassSurface(RoundedRectangle(cornerRadius: 5, style: .continuous))
                             }
                             .buttonStyle(.plain)
                             .pointerOnHover()
@@ -645,11 +637,7 @@ private struct WallpaperViewportView: View {
                                 .foregroundStyle(Color.white)
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 5)
-                                .background(Color.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                        .strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5)
-                                )
+                                .glassSurface(RoundedRectangle(cornerRadius: 5, style: .continuous))
                             }
                             .buttonStyle(.plain)
                             .pointerOnHover()

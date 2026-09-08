@@ -171,9 +171,33 @@ enum Design {
     }
 }
 
-// MARK: - Pointer Cursor Extension
+// MARK: - Glass surfaces
+
+struct VisualEffectBackground: NSViewRepresentable {
+    let material: NSVisualEffectView.Material
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = material
+        view.blendingMode = .withinWindow
+        view.state = .active
+        return view
+    }
+
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
+}
 
 extension View {
+    @ViewBuilder
+    func glassSurface<S: Shape>(_ shape: S) -> some View {
+        if #available(macOS 26.0, *) {
+            glassEffect(.regular.interactive(), in: shape)
+        } else {
+            background(VisualEffectBackground(material: .hudWindow))
+                .clipShape(shape)
+        }
+    }
+
     func pointerOnHover() -> some View {
         self.onHover { inside in
             if inside {
@@ -247,15 +271,7 @@ struct PrimaryActionButton: View {
             .foregroundStyle(Design.accentInk)
             .padding(.horizontal, 18)
             .padding(.vertical, 9)
-            .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Design.accent)
-                    .opacity(hovering ? 0.90 : 1.0)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .strokeBorder(Design.hairlineStrong, lineWidth: 1)
-            )
+            .glassSurface(RoundedRectangle(cornerRadius: 6, style: .continuous))
         }
         .buttonStyle(.plain)
         .scaleEffect(pressing ? 0.96 : (hovering && isEnabled ? 1.01 : 1.0))
@@ -303,14 +319,7 @@ struct GhostIconButton: View {
             .foregroundStyle(hovering ? Design.ink : Design.inkSecondary)
             .padding(.horizontal, text != nil ? 10 : 8)
             .frame(height: 28)
-            .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(hovering ? Design.surfaceRaised : Design.surface)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .strokeBorder(hovering ? Design.hairlineStrong : Design.hairline, lineWidth: 1)
-            )
+            .glassSurface(RoundedRectangle(cornerRadius: 6, style: .continuous))
             .scaleEffect(pressing ? 0.96 : 1.0)
         }
         .buttonStyle(.plain)
@@ -336,12 +345,9 @@ struct PillToggleStyle: ToggleStyle {
         } label: {
             ZStack(alignment: .leading) {
                 RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .fill(configuration.isOn ? Design.accent : Design.surfaceRaised)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .strokeBorder(configuration.isOn ? Color.clear : Design.hairlineStrong, lineWidth: 1)
-                    )
+                    .fill(Color.clear)
                     .frame(width: 34, height: 18)
+                    .glassSurface(RoundedRectangle(cornerRadius: 4, style: .continuous))
                 RoundedRectangle(cornerRadius: 2, style: .continuous)
                     .fill(configuration.isOn ? Design.accentInk : Design.inkSecondary)
                     .frame(width: 12, height: 12)
@@ -389,8 +395,7 @@ struct SegmentedSwitch<Option: Hashable>: View {
             }
         }
         .padding(2.5)
-        .background(Design.surface, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Design.hairline, lineWidth: 1))
+        .glassSurface(RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
 }
 
@@ -432,26 +437,45 @@ struct WallpsToast: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 7)
-        .background(
-            Design.surface,
-            in: Capsule()
-        )
-        .overlay(
-            Capsule()
-                .strokeBorder(Design.hairlineStrong, lineWidth: 1)
-        )
+        .glassSurface(Capsule())
         .shadow(color: Color.black.opacity(0.18), radius: 14, y: 6)
     }
 }
 
 struct WindowChromeConfigurator: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView {
-        let view = NSView()
+        let view: NSView
+
+        if #available(macOS 26.0, *) {
+            let glassView = NSGlassEffectView()
+            glassView.style = .regular
+            glassView.cornerRadius = 0
+            view = glassView
+        } else {
+            let visualEffectView = NSVisualEffectView()
+            visualEffectView.material = .underWindowBackground
+            visualEffectView.blendingMode = .behindWindow
+            visualEffectView.state = .active
+            view = visualEffectView
+        }
+
         DispatchQueue.main.async {
-            view.window?.isMovableByWindowBackground = true
+            guard let window = view.window else { return }
+            window.isOpaque = false
+            window.backgroundColor = .clear
+            window.styleMask.insert(.fullSizeContentView)
+            window.titlebarAppearsTransparent = true
+            window.titleVisibility = .hidden
+            window.isMovableByWindowBackground = true
         }
         return view
     }
 
-    func updateNSView(_ nsView: NSView, context: Context) {}
+    func updateNSView(_ nsView: NSView, context: Context) {
+        guard let window = nsView.window else { return }
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.styleMask.insert(.fullSizeContentView)
+        window.titlebarAppearsTransparent = true
+    }
 }
