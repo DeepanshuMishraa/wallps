@@ -198,6 +198,16 @@ extension View {
         }
     }
 
+    @ViewBuilder
+    func tintedGlassSurface<S: Shape>(_ shape: S) -> some View {
+        if #available(macOS 26.0, *) {
+            glassEffect(.regular, in: shape)
+        } else {
+            background(VisualEffectBackground(material: .underWindowBackground))
+                .clipShape(shape)
+        }
+    }
+
     func pointerOnHover() -> some View {
         self.onHover { inside in
             if inside {

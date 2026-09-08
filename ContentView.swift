@@ -240,14 +240,7 @@ struct ContentView: View {
                         .font(.system(size: 11.5, weight: .semibold))
                         .foregroundStyle(showingSettings ? Design.ink : Design.inkSecondary)
                         .frame(width: 28, height: 28)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(showingSettings ? Design.surfaceRaised : Design.surface)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .strokeBorder(showingSettings ? Design.hairlineStrong : Design.hairline, lineWidth: 1)
-                        )
+                        .tintedGlassSurface(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .pointerOnHover()
@@ -365,7 +358,7 @@ struct ContentView: View {
         }
         .padding(16)
         .frame(width: 270)
-        .glassSurface(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .tintedGlassSurface(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .shadow(color: Color.black.opacity(0.20), radius: 16, y: 8)
     }
 
