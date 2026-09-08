@@ -191,7 +191,7 @@ extension View {
     @ViewBuilder
     func glassSurface<S: Shape>(_ shape: S) -> some View {
         if #available(macOS 26.0, *) {
-            glassEffect(.regular.interactive(), in: shape)
+            glassEffect(.clear.interactive(), in: shape)
         } else {
             background(VisualEffectBackground(material: .hudWindow))
                 .clipShape(shape)
