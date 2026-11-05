@@ -42,7 +42,7 @@ final class LiveWallpaperManager {
             .appendingPathComponent("Library/Application Support/com.apple.wallpaper/Store/Index.plist")
     }
 
-    private let categoryID = "WA000000-0000-4000-8000-000000000001"
+    private let categoryID = SystemWallpaperCatalog.wallpsAerialCategoryID
     private let subcategoryID = "WA000000-0000-4000-8000-000000000002"
 
     /// Maps source video path → "assetID|size|mtime" so a previously
@@ -186,13 +186,60 @@ final class LiveWallpaperManager {
         defaults.set(registry, forKey: Self.registryKey)
     }
 
-    /// Re-asserts an already-registered live lock screen (e.g. after a reboot).
-    func reactivateAerial(for url: URL) async throws {
-        guard Self.isSupported else { return }
-        guard let existing = systemAerialURL(at: url) else { return }
+    /// Re-asserts an already-registered live lock screen (e.g. after a reboot)
+    /// and repairs it when macOS wiped it. OS updates (seen on macOS 27)
+    /// empty `aerials/videos` and replace `manifest/entries.json`, which
+    /// silently dropped Wallps' custom aerial. Returns the aerial URL now
+    /// active, which differs from `url` when it had to be re-registered;
+    /// nil when nothing could be reactivated.
+    func reactivateAerial(for url: URL) async throws -> URL? {
+        guard Self.isSupported else { return nil }
+        guard let existing = systemAerialURL(at: url) else { return nil }
         let assetID = existing.deletingPathExtension().lastPathComponent
-        guard UUID(uuidString: assetID) != nil else { return }
+        guard UUID(uuidString: assetID) != nil else { return nil }
+
+        guard fileManager.fileExists(atPath: existing.path) else {
+            guard let source = recoverableSource(forAssetID: assetID) else { return nil }
+            return try await setLiveLockScreen(videoURL: source)
+        }
+
+        if !manifestContainsAsset(assetID) {
+            let thumbnailURL = thumbnailsDir.appendingPathComponent("\(assetID).png")
+            try fileManager.createDirectory(at: thumbnailsDir, withIntermediateDirectories: true)
+            makeThumbnailIfNeeded(videoURL: existing, outputURL: thumbnailURL)
+            insertIntoManifest(
+                assetID: assetID, videoURL: existing, thumbnailURL: thumbnailURL,
+                name: registeredName(forAssetID: assetID)
+            )
+        }
         try activateAerial(assetID: assetID)
+        return existing
+    }
+
+    /// The original file an aerial asset was built from, if it still exists:
+    /// the user's clip (from the registry) or a Wallps-downloaded Apple aerial.
+    private func recoverableSource(forAssetID assetID: String) -> URL? {
+        let registry = defaults.dictionary(forKey: Self.registryKey) as? [String: String] ?? [:]
+        if let path = registry.first(where: { $0.value.hasPrefix("\(assetID)|") })?.key,
+           fileManager.fileExists(atPath: path) {
+            return URL(fileURLWithPath: path)
+        }
+        let downloaded = SystemWallpaperCatalog.aerialsDirectory.appendingPathComponent("\(assetID).mov")
+        return fileManager.fileExists(atPath: downloaded.path) ? downloaded : nil
+    }
+
+    private func registeredName(forAssetID assetID: String) -> String? {
+        let registry = defaults.dictionary(forKey: Self.registryKey) as? [String: String] ?? [:]
+        guard let raw = registry.values.first(where: { $0.hasPrefix("\(assetID)|") }) else { return nil }
+        let parts = raw.split(separator: "|", maxSplits: 3).map(String.init)
+        return parts.count == 4 ? parts[3] : nil
+    }
+
+    private func manifestContainsAsset(_ assetID: String) -> Bool {
+        guard let data = try? Data(contentsOf: manifestURL),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let assets = root["assets"] as? [[String: Any]] else { return false }
+        return assets.contains { ($0["id"] as? String)?.caseInsensitiveCompare(assetID) == .orderedSame }
     }
 
     /// Activates an aerials asset as the active wallpaper by rewriting the
@@ -400,7 +447,7 @@ final class LiveWallpaperManager {
             "WallpaperImageExtension",
             "WallpaperLegacyExtension"
         ] {
-            try? Process.run(URL(fileURLWithPath: "/usr/bin/killall"), arguments: [process])
+            _ = try? Process.run(URL(fileURLWithPath: "/usr/bin/killall"), arguments: [process])
         }
     }
 

@@ -70,36 +70,111 @@ final class MenuBarManager: NSObject, NSMenuDelegate {
             && window.identifier?.rawValue != DesktopCanvas.windowIdentifier
     }
 
+    /// Menu bar menu, ordered by how often each thing is needed:
+    /// what's set now → quick actions → switches → app.
+    /// Holding Option turns "Swap Wallpapers" into "Reapply Wallpapers",
+    /// a recovery action most people never need to see.
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
+        let switcher = WallpaperSwitcher.shared
+        let isPaused = switcher.isPaused
+        let isComplete = switcher.savedDesktopURL != nil && switcher.savedLoginURL != nil
 
-        let desktop = WallpaperSwitcher.shared.savedDesktopURL?.lastPathComponent ?? "Not set"
-        let login = WallpaperSwitcher.shared.savedLoginURL?.lastPathComponent ?? "Not set"
-
-        menu.addItem(disabledItem("Wallps"))
-        menu.addItem(disabledItem("Desktop: \(desktop)"))
-        menu.addItem(disabledItem("Lock screen: \(login)"))
-        menu.addItem(.separator())
-        menu.addItem(actionItem("Set wallpapers", #selector(setWallpapers)))
-        menu.addItem(actionItem("Refresh", #selector(refresh)))
+        menu.addItem(wallpaperItem("Desktop", url: switcher.savedDesktopURL))
+        menu.addItem(wallpaperItem("Lock Screen", url: switcher.savedLoginURL))
         menu.addItem(.separator())
 
-        let loginItem = NSMenuItem(title: "Launch at login", action: #selector(toggleLoginItem), keyEquivalent: "")
-        loginItem.target = self
+        let swap = actionItem("Swap Wallpapers", #selector(swapWallpapers))
+        swap.isEnabled = isComplete && !isPaused
+        menu.addItem(swap)
+
+        let reapply = actionItem("Reapply Wallpapers", #selector(refresh))
+        reapply.isAlternate = true
+        reapply.keyEquivalentModifierMask = .option
+        reapply.isEnabled = isComplete && !isPaused
+        menu.addItem(reapply)
+
+        menu.addItem(actionItem("Browse Wallpapers…", #selector(browse)))
+        menu.addItem(.separator())
+
+        let pause = actionItem("Pause Switching", #selector(togglePause))
+        pause.state = isPaused ? .on : .off
+        menu.addItem(pause)
+
+        let loginItem = actionItem("Launch at Login", #selector(toggleLoginItem))
         loginItem.state = LoginItemManager.isEnabled ? .on : .off
         menu.addItem(loginItem)
 
         menu.addItem(.separator())
         menu.addItem(actionItem("Open Wallps", #selector(openWindow)))
-        menu.addItem(actionItem("Quit", #selector(quit)))
+        let quit = NSMenuItem(title: "Quit Wallps", action: #selector(quit), keyEquivalent: "q")
+        quit.target = self
+        menu.addItem(quit)
     }
 
-    @objc private func setWallpapers() {
-        NotificationCenter.default.post(name: .setWallpapers, object: nil)
+    /// "Desktop" / "Lock Screen" row with a thumbnail and the file's name.
+    /// Clicking it opens the main window, where it can be changed.
+    private func wallpaperItem(_ title: String, url: URL?) -> NSMenuItem {
+        let item = actionItem(title, #selector(openWindow))
+        let name = url?.deletingPathExtension().lastPathComponent ?? "Not set"
+        if #available(macOS 14.4, *) {
+            item.subtitle = name
+        } else {
+            item.title = "\(title): \(name)"
+        }
+        item.image = Self.thumbnail(for: url)
+        return item
+    }
+
+    private static let thumbnailSize = NSSize(width: 40, height: 25)
+
+    private static func thumbnail(for url: URL?) -> NSImage? {
+        guard let url else { return symbol("photo") }
+        let isVideo = ["mov", "mp4", "m4v"].contains(url.pathExtension.lowercased())
+        guard !isVideo else { return symbol("play.rectangle") }
+        guard let source = WallpaperImageStore.cachedImage(for: url) else {
+            // Warm the cache so the thumbnail is there next time the menu opens.
+            WallpaperImageStore.load(url, maxPixelSize: 160) { _ in }
+            return symbol("photo")
+        }
+        let size = thumbnailSize
+        return NSImage(size: size, flipped: false) { rect in
+            let path = NSBezierPath(roundedRect: rect, xRadius: 4, yRadius: 4)
+            path.addClip()
+            let scale = max(rect.width / source.size.width, rect.height / source.size.height)
+            let drawn = NSSize(width: source.size.width * scale, height: source.size.height * scale)
+            source.draw(in: NSRect(
+                x: rect.midX - drawn.width / 2,
+                y: rect.midY - drawn.height / 2,
+                width: drawn.width,
+                height: drawn.height
+            ))
+            return true
+        }
+    }
+
+    private static func symbol(_ name: String) -> NSImage? {
+        let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)
+        image?.isTemplate = true
+        return image
+    }
+
+    @objc private func swapWallpapers() {
+        NotificationCenter.default.post(name: .swapWallpapers, object: nil)
     }
 
     @objc private func refresh() {
         NotificationCenter.default.post(name: .refreshWallpaperPreviews, object: nil)
+    }
+
+    @objc private func browse() {
+        showMainWindow()
+        NotificationCenter.default.post(name: .openWallpaperBrowser, object: nil)
+    }
+
+    @objc private func togglePause() {
+        WallpaperSwitcher.shared.isPaused.toggle()
+        NotificationCenter.default.post(name: .wallpsStateChanged, object: nil)
     }
 
     @objc private func toggleLoginItem() {
@@ -116,12 +191,6 @@ final class MenuBarManager: NSObject, NSMenuDelegate {
 
     @objc private func quit() {
         NSApp.terminate(nil)
-    }
-
-    private func disabledItem(_ title: String) -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-        item.isEnabled = false
-        return item
     }
 
     private func actionItem(_ title: String, _ action: Selector) -> NSMenuItem {
@@ -149,7 +218,10 @@ final class MenuBarManager: NSObject, NSMenuDelegate {
 }
 
 final class WallpsWindowDelegate: NSObject, NSWindowDelegate {
+    var isTerminating = false
+
     func windowShouldClose(_ sender: NSWindow) -> Bool {
+        guard !isTerminating else { return true }
         sender.orderOut(nil)
         NSApp.setActivationPolicy(.accessory)
         NSApp.deactivate()

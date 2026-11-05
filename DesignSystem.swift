@@ -2,14 +2,17 @@ import AppKit
 import CoreText
 import SwiftUI
 
-// MARK: - Font Registrar for Spline Sans Mono
+// MARK: - Font Registrar
 
 enum FontRegistrar {
     private static var hasRegistered = false
     private static let bundledFontNames = [
-        "SplineSansMono[wght]",
-        "SplineSansMono-Italic[wght]",
-        "GeistMono-Variable"
+        "GeistSerif-Variable",
+        "Cove-Light",
+        "Cove-Regular",
+        "Cove-Medium",
+        "Cove-SemiBold",
+        "Cove-Bold"
     ]
 
     static func registerBundledFonts() {
@@ -61,113 +64,66 @@ extension Color {
     }
 }
 
-// MARK: - Design Tokens (Spline Sans Mono Aesthetic)
+// MARK: - Design Tokens
 
+/// Native macOS look: SF Pro at system sizes, semantic system colors, and the
+/// user's accent color. Custom values exist only where AppKit has no
+/// equivalent (preview strokes, dimming over images).
 enum Design {
-    // ── High-Contrast Precision Monochromatic Palette ─────────────────
-    static let background = Color.dynamic(
-        light: NSColor(calibratedRed: 0.96, green: 0.96, blue: 0.97, alpha: 1.0), // #F5F5F7
-        dark: NSColor(calibratedRed: 0.035, green: 0.035, blue: 0.040, alpha: 1.0) // #09090A (Pure Deep Obsidian)
-    )
-
-    static let surface = Color.dynamic(
-        light: NSColor(calibratedRed: 1.0, green: 1.0, blue: 1.0, alpha: 1.0),
-        dark: NSColor(calibratedRed: 0.075, green: 0.075, blue: 0.085, alpha: 1.0)  // #131316
-    )
-
-    static let surfaceRaised = Color.dynamic(
-        light: NSColor(calibratedRed: 0.92, green: 0.92, blue: 0.94, alpha: 1.0),
-        dark: NSColor(calibratedRed: 0.12, green: 0.12, blue: 0.135, alpha: 1.0)   // #1F1F22
-    )
-
-    static let surfaceHighlight = Color.dynamic(
-        light: NSColor(calibratedRed: 0.88, green: 0.88, blue: 0.90, alpha: 1.0),
-        dark: NSColor(calibratedRed: 0.18, green: 0.18, blue: 0.20, alpha: 1.0)
-    )
+    static let ink = Color.primary
+    static let inkSecondary = Color.secondary
+    static let inkTertiary = Color(nsColor: .tertiaryLabelColor)
 
     static let hairline = Color.dynamic(
-        light: NSColor.black.withAlphaComponent(0.08),
-        dark: NSColor.white.withAlphaComponent(0.09)
+        light: NSColor.black.withAlphaComponent(0.10),
+        dark: NSColor.white.withAlphaComponent(0.12)
     )
 
     static let hairlineStrong = Color.dynamic(
-        light: NSColor.black.withAlphaComponent(0.18),
-        dark: NSColor.white.withAlphaComponent(0.20)
+        light: NSColor.black.withAlphaComponent(0.22),
+        dark: NSColor.white.withAlphaComponent(0.26)
     )
 
-    static let hairlineSubtle = Color.dynamic(
+    /// Resting fill for empty wells and placeholders.
+    static let well = Color.dynamic(
         light: NSColor.black.withAlphaComponent(0.04),
         dark: NSColor.white.withAlphaComponent(0.05)
     )
 
-    static let ink = Color.dynamic(
-        light: NSColor(calibratedRed: 0.05, green: 0.05, blue: 0.06, alpha: 1.0),
-        dark: NSColor(calibratedRed: 0.98, green: 0.98, blue: 0.99, alpha: 1.0)
-    )
+    static let success = Color(nsColor: .systemGreen)
+    static let warning = Color(nsColor: .systemOrange)
 
-    static let inkSecondary = Color.dynamic(
-        light: NSColor(calibratedRed: 0.35, green: 0.35, blue: 0.38, alpha: 1.0),
-        dark: NSColor(calibratedRed: 0.65, green: 0.65, blue: 0.70, alpha: 1.0)
-    )
+    static let previewRadius: CGFloat = 12
 
-    static let inkTertiary = Color.dynamic(
-        light: NSColor(calibratedRed: 0.55, green: 0.55, blue: 0.60, alpha: 1.0),
-        dark: NSColor(calibratedRed: 0.40, green: 0.40, blue: 0.45, alpha: 1.0)
-    )
-
-    static let accent = Color.dynamic(
-        light: NSColor(calibratedRed: 0.05, green: 0.05, blue: 0.06, alpha: 1.0),
-        dark: NSColor(calibratedRed: 1.0, green: 1.0, blue: 1.0, alpha: 1.0)
-    )
-
-    static let accentInk = Color.dynamic(
-        light: NSColor.white,
-        dark: NSColor(calibratedRed: 0.05, green: 0.05, blue: 0.06, alpha: 1.0)
-    )
-
-    static let success = Color.dynamic(
-        light: NSColor(calibratedRed: 0.08, green: 0.65, blue: 0.38, alpha: 1.0),
-        dark: NSColor(calibratedRed: 0.20, green: 0.88, blue: 0.50, alpha: 1.0)
-    )
-
-    static let warning = Color.dynamic(
-        light: NSColor(calibratedRed: 0.88, green: 0.52, blue: 0.08, alpha: 1.0),
-        dark: NSColor(calibratedRed: 0.98, green: 0.70, blue: 0.20, alpha: 1.0)
-    )
-
-    static let error = Color.dynamic(
-        light: NSColor(calibratedRed: 0.88, green: 0.22, blue: 0.22, alpha: 1.0),
-        dark: NSColor(calibratedRed: 1.00, green: 0.38, blue: 0.38, alpha: 1.0)
-    )
-
-    // ── Typography: 100% Pure Spline Sans Mono ────────────────────────
+    /// Cove for all interface text. Cove draws lighter than SF Pro at the same
+    /// nominal weight, so each request renders one step heavier (regular →
+    /// Medium, medium → SemiBold, …). Falls back to SF Pro if registration
+    /// failed.
     static func font(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
         FontRegistrar.registerBundledFonts()
-
-        let postScriptName: String
+        let name: String
         switch weight {
-        case .ultraLight, .thin, .light: postScriptName = "SplineSansMonoRoman-Light"
-        case .regular: postScriptName = "SplineSansMono-Regular"
-        case .medium: postScriptName = "SplineSansMonoRoman-Medium"
-        case .semibold: postScriptName = "SplineSansMonoRoman-SemiBold"
-        case .bold, .heavy, .black: postScriptName = "SplineSansMonoRoman-Bold"
-        default: postScriptName = "SplineSansMono-Regular"
+        case .ultraLight, .thin, .light: name = "Cove-Regular"
+        case .medium: name = "Cove-SemiBold"
+        case .semibold, .bold, .heavy, .black: name = "Cove-Bold"
+        default: name = "Cove-Medium"
         }
-
-        if NSFont(name: postScriptName, size: size) != nil {
-            return .custom(postScriptName, size: size)
+        if NSFont(name: name, size: size) != nil {
+            return .custom(name, size: size)
         }
-        if NSFont(name: "Spline Sans Mono", size: size) != nil {
-            return .custom("Spline Sans Mono", size: size).weight(weight)
-        }
-        if NSFont(name: "GeistMono-Regular", size: size) != nil {
-            return .custom("GeistMono-Regular", size: size)
-        }
-        return .system(size: size, weight: weight, design: .monospaced)
+        return .system(size: size, weight: weight)
     }
 
-    static func mono(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        font(size, weight: weight)
+    /// Geist Serif for titles (screen names, catalog headings). The bundled
+    /// cut has a single weight; falls back to the system serif if it failed
+    /// to register.
+    static func display(_ size: CGFloat) -> Font {
+        FontRegistrar.registerBundledFonts()
+        let name = "GeistSerifVF-Regular"
+        if NSFont(name: name, size: size) != nil {
+            return .custom(name, size: size)
+        }
+        return .system(size: size, weight: .regular, design: .serif)
     }
 }
 
@@ -188,6 +144,7 @@ struct VisualEffectBackground: NSViewRepresentable {
 }
 
 extension View {
+    /// Clear glass for controls floating over wallpaper images.
     @ViewBuilder
     func glassSurface<S: Shape>(_ shape: S) -> some View {
         if #available(macOS 26.0, *) {
@@ -198,236 +155,109 @@ extension View {
         }
     }
 
+    /// Regular glass for chrome that sits on the window background.
     @ViewBuilder
     func tintedGlassSurface<S: Shape>(_ shape: S) -> some View {
         if #available(macOS 26.0, *) {
             glassEffect(.regular, in: shape)
         } else {
-            background(VisualEffectBackground(material: .underWindowBackground))
+            background(VisualEffectBackground(material: .popover))
                 .clipShape(shape)
         }
     }
 
     func pointerOnHover() -> some View {
-        self.onHover { inside in
-            if inside {
-                NSCursor.pointingHand.push()
-            } else {
-                NSCursor.pop()
-            }
-        }
+        modifier(PointerOnHover())
     }
 }
 
-// MARK: - Precision Minimalist Components
+/// Pointing-hand cursor while hovered. Unbalanced `NSCursor.push/pop` left
+/// the hand stuck whenever a hovered control vanished (sheet dismissed,
+/// chips hidden) before the mouse exited, so the pop is tracked explicitly.
+private struct PointerOnHover: ViewModifier {
+    @State private var pushed = false
 
-struct SectionLabel: View {
-    let text: String
-    var code: String? = nil
-
-    init(_ text: String, code: String? = nil) {
-        self.text = text
-        self.code = code
-    }
-
-    var body: some View {
-        HStack(spacing: 6) {
-            if let code {
-                Text("// \(code)")
-                    .font(Design.font(10, weight: .bold))
-                    .foregroundStyle(Design.inkTertiary)
-            }
-            Text(text.uppercased())
-                .font(Design.font(10.5, weight: .bold))
-                .tracking(1.8)
-                .foregroundStyle(Design.ink)
-            Spacer()
-        }
-    }
-}
-
-struct PrimaryActionButton: View {
-    let title: String
-    var isLoading = false
-    var keyEquivalent: KeyEquivalent? = nil
-    let action: () -> Void
-
-    @State private var hovering = false
-    @State private var pressing = false
-    @Environment(\.isEnabled) private var isEnabled
-
-    var body: some View {
-        Group {
-            if let key = keyEquivalent {
-                buttonBody.keyboardShortcut(key, modifiers: [.command])
-            } else {
-                buttonBody
-            }
-        }
-    }
-
-    private var buttonBody: some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                if isLoading {
-                    ProgressView()
-                        .controlSize(.mini)
-                        .tint(Design.accentInk)
+    func body(content: Content) -> some View {
+        content
+            .onHover { inside in
+                if inside, !pushed {
+                    NSCursor.pointingHand.push()
+                    pushed = true
+                } else if !inside, pushed {
+                    NSCursor.pop()
+                    pushed = false
                 }
-                Text(title.uppercased())
-                    .font(Design.font(11, weight: .bold))
-                    .tracking(1.4)
             }
-            .foregroundStyle(Design.accentInk)
-            .padding(.horizontal, 18)
-            .padding(.vertical, 9)
-            .glassSurface(RoundedRectangle(cornerRadius: 6, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .scaleEffect(pressing ? 0.96 : (hovering && isEnabled ? 1.01 : 1.0))
-        .opacity(isEnabled ? 1 : 0.35)
-        .pointerOnHover()
-        .onHover { hovering = $0 }
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in pressing = true }
-                .onEnded { _ in pressing = false }
-        )
-        .animation(.spring(response: 0.2, dampingFraction: 0.75), value: pressing)
-        .animation(.easeOut(duration: 0.12), value: hovering)
+            .onDisappear {
+                if pushed {
+                    NSCursor.pop()
+                    pushed = false
+                }
+            }
     }
 }
 
-struct GhostIconButton: View {
+// MARK: - Components
+
+/// Capsule button for the window header, shaped like a macOS 26 toolbar item.
+struct ToolbarButton: View {
     let symbol: String
-    let text: String?
+    var title: String? = nil
     let help: String
+    var isActive = false
     let action: () -> Void
 
-    init(symbol: String, text: String? = nil, help: String, action: @escaping () -> Void) {
-        self.symbol = symbol
-        self.text = text
-        self.help = help
-        self.action = action
-    }
-
     @State private var hovering = false
-    @State private var pressing = false
-    @Environment(\.isEnabled) private var isEnabled
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 6) {
                 Image(systemName: symbol)
-                    .font(.system(size: 11, weight: .bold))
-                if let text {
-                    Text(text.uppercased())
-                        .font(Design.font(10, weight: .bold))
-                        .tracking(1.2)
+                    .font(.system(size: 13, weight: .medium))
+                if let title {
+                    Text(title)
+                        .font(Design.font(12, weight: .medium))
                 }
             }
-            .foregroundStyle(hovering ? Design.ink : Design.inkSecondary)
-            .padding(.horizontal, text != nil ? 10 : 8)
-            .frame(height: 28)
-            .glassSurface(RoundedRectangle(cornerRadius: 6, style: .continuous))
-            .scaleEffect(pressing ? 0.96 : 1.0)
+            .foregroundStyle(isActive || hovering ? Design.ink : Design.inkSecondary)
+            .padding(.horizontal, title == nil ? 0 : 12)
+            .frame(minWidth: 30, minHeight: 30)
+            .tintedGlassSurface(Capsule())
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .opacity(isEnabled ? 1 : 0.35)
-        .pointerOnHover()
         .onHover { hovering = $0 }
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in pressing = true }
-                .onEnded { _ in pressing = false }
-        )
         .animation(.easeOut(duration: 0.12), value: hovering)
         .help(help)
+        .accessibilityLabel(title ?? help)
     }
 }
 
-struct PillToggleStyle: ToggleStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        Button {
-            withAnimation(.spring(response: 0.24, dampingFraction: 0.78)) {
-                configuration.isOn.toggle()
+/// Small capsule button that floats over an image (Change, Desktop, Lock Screen).
+struct OverlayButton: View {
+    let title: String
+    var symbol: String? = nil
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                if let symbol {
+                    Image(systemName: symbol)
+                        .font(.system(size: 10.5, weight: .semibold))
+                }
+                Text(title)
+                    .font(Design.font(11.5, weight: .semibold))
             }
-        } label: {
-            ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .fill(Color.clear)
-                    .frame(width: 34, height: 18)
-                    .glassSurface(RoundedRectangle(cornerRadius: 4, style: .continuous))
-                RoundedRectangle(cornerRadius: 2, style: .continuous)
-                    .fill(configuration.isOn ? Design.accentInk : Design.inkSecondary)
-                    .frame(width: 12, height: 12)
-                    .offset(x: configuration.isOn ? 18 : 3)
-            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 6)
+            .glassSurface(Capsule())
+            .contentShape(Capsule())
+            .shadow(color: .black.opacity(0.25), radius: 6, y: 2)
         }
         .buttonStyle(.plain)
         .pointerOnHover()
-    }
-}
-
-struct SegmentedSwitch<Option: Hashable>: View {
-    let options: [Option]
-    @Binding var selection: Option
-    let label: (Option) -> String
-
-    var body: some View {
-        HStack(spacing: 2) {
-            ForEach(options, id: \.self) { option in
-                let selected = option == selection
-                Button {
-                    withAnimation(.spring(response: 0.22, dampingFraction: 0.8)) {
-                        selection = option
-                    }
-                } label: {
-                    Text(label(option).uppercased())
-                        .font(Design.font(9.5, weight: selected ? .bold : .medium))
-                        .tracking(1.0)
-                        .foregroundStyle(selected ? Design.ink : Design.inkTertiary)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(
-                            selected
-                                ? RoundedRectangle(cornerRadius: 4, style: .continuous).fill(Design.surfaceRaised)
-                                : nil
-                        )
-                        .overlay(
-                            selected
-                                ? RoundedRectangle(cornerRadius: 4, style: .continuous).strokeBorder(Design.hairlineStrong, lineWidth: 1)
-                                : nil
-                        )
-                }
-                .buttonStyle(.plain)
-                .pointerOnHover()
-            }
-        }
-        .padding(2.5)
-        .glassSurface(RoundedRectangle(cornerRadius: 6, style: .continuous))
-    }
-}
-
-struct StatusDot: View {
-    let filled: Bool
-    var isGlowing: Bool = false
-    var customColor: Color? = nil
-
-    var body: some View {
-        let activeColor = customColor ?? (filled ? Design.ink : Design.inkTertiary)
-        ZStack {
-            if filled && isGlowing {
-                RoundedRectangle(cornerRadius: 2, style: .continuous)
-                    .fill(activeColor.opacity(0.35))
-                    .frame(width: 10, height: 10)
-                    .blur(radius: 2)
-            }
-            RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                .strokeBorder(filled ? activeColor : Design.inkTertiary, lineWidth: 1.2)
-                .background(RoundedRectangle(cornerRadius: 1.5, style: .continuous).fill(filled ? activeColor : Color.clear))
-                .frame(width: 6, height: 6)
-        }
     }
 }
 
@@ -435,20 +265,19 @@ struct WallpsToast: View {
     let message: String
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 7) {
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 11.5, weight: .bold))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Design.success)
 
-            Text(message.uppercased())
-                .font(Design.font(9.5, weight: .bold))
-                .tracking(1.0)
+            Text(message)
+                .font(Design.font(12.5, weight: .medium))
                 .foregroundStyle(Design.ink)
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 7)
-        .glassSurface(Capsule())
-        .shadow(color: Color.black.opacity(0.18), radius: 14, y: 6)
+        .padding(.vertical, 8)
+        .tintedGlassSurface(Capsule())
+        .shadow(color: Color.black.opacity(0.15), radius: 12, y: 4)
     }
 }
 

@@ -5,7 +5,8 @@ struct SystemWallpaperBrowserView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var downloadCenter = WallpaperDownloadCenter.shared
     @State private var items: [SystemWallpaperItem] = []
-    @State private var filter: Filter = .aerials
+    @State private var hasLoaded = false
+    @State private var selectedCollection: WallpaperCollection?
     @State private var aerialMode: AerialMode = .live
     @State private var searchText = ""
     @State private var alert: WallpaperService.AlertMessage?
@@ -20,45 +21,36 @@ struct SystemWallpaperBrowserView: View {
 
         var title: String {
             switch self {
-            case .live: return "LIVE"
-            case .still: return "STILL"
+            case .live: return "Live"
+            case .still: return "Still"
             }
         }
     }
 
-    enum Filter: String, CaseIterable, Identifiable {
-        case aerials
-        case dynamicAndStatic
+    /// Sidebar groups: one section per macOS release, one for themed sets.
+    private static let releaseCollections: [WallpaperCollection] = [
+        .macOS27, .macOS26, .macOS15, .macOS14, .macOS13, .macOS12, .bigSur, .catalina, .mojave
+    ]
 
-        var id: String { rawValue }
-
-        var title: String {
-            switch self {
-            case .aerials: return "AERIALS"
-            case .dynamicAndStatic: return "SYSTEM STILLS"
-            }
-        }
-
-        func matches(_ item: SystemWallpaperItem) -> Bool {
-            switch self {
-            case .aerials: return item.kind == .aerial
-            case .dynamicAndStatic: return item.kind != .aerial
-            }
-        }
-    }
-
-    private let columns = [GridItem(.adaptive(minimum: 190, maximum: 360), spacing: 16)]
+    private let columns = [GridItem(.adaptive(minimum: 180, maximum: 320), spacing: 18, alignment: .top)]
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            grid
+        HStack(spacing: 0) {
+            sidebar
+                .frame(width: 200)
+
+            Divider()
+
+            VStack(spacing: 0) {
+                detailHeader
+                grid
+            }
         }
         .background {
             WindowChromeConfigurator()
                 .ignoresSafeArea()
         }
-        .frame(minWidth: 640, idealWidth: 840, maxWidth: .infinity, minHeight: 480, idealHeight: 600, maxHeight: .infinity)
+        .frame(minWidth: 720, idealWidth: 900, maxWidth: .infinity, minHeight: 500, idealHeight: 620, maxHeight: .infinity)
         .alert(item: $alert) { alert in
             Alert(
                 title: Text(alert.title),
@@ -73,13 +65,8 @@ struct SystemWallpaperBrowserView: View {
         .overlay(alignment: .top) {
             if let message = toastMessage {
                 WallpsToast(message: message)
-                    .padding(.top, 12)
-                    .transition(
-                        .asymmetric(
-                            insertion: .move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.92)),
-                            removal: .move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.92))
-                        )
-                    )
+                    .padding(.top, 14)
+                    .transition(.move(edge: .top).combined(with: .opacity))
                     .zIndex(200)
                     .onTapGesture {
                         withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
@@ -90,119 +77,197 @@ struct SystemWallpaperBrowserView: View {
         }
     }
 
-    private var filteredItems: [SystemWallpaperItem] {
-        items
-            .filter { searchText.isEmpty || $0.name.localizedCaseInsensitiveContains(searchText) }
-            .filter(filter.matches)
-            .sorted {
-                if $0.isDownloaded != $1.isDownloaded { return $0.isDownloaded }
-                return $0.name < $1.name
-            }
+    // MARK: - Filtering
+
+    /// Collections that actually have wallpapers on this Mac, newest release first.
+    private var collections: [WallpaperCollection] {
+        let present = Set(items.map(\.collection))
+        return WallpaperCollection.allCases.filter(present.contains)
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 10) {
-                StatusDot(filled: true, isGlowing: true, customColor: Design.accent)
+    /// The selected collection, falling back to the newest one available.
+    private var activeCollection: WallpaperCollection? {
+        selectedCollection.flatMap { collections.contains($0) ? $0 : nil } ?? collections.first
+    }
 
-                Text("APPLE WALLPAPERS & 4K AERIALS")
-                    .font(Design.font(12, weight: .bold))
-                    .tracking(2.0)
-                    .foregroundStyle(Design.ink)
+    private var isSearching: Bool {
+        !searchText.trimmingCharacters(in: .whitespaces).isEmpty
+    }
 
-                Spacer()
+    /// Searching spans every collection; otherwise only the active one is shown.
+    private var filteredItems: [SystemWallpaperItem] {
+        guard !isSearching else {
+            return items.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
+        }
+        return items.filter { $0.collection == activeCollection }
+    }
 
-                GhostIconButton(symbol: "xmark", text: "CLOSE", help: "Close Catalog (ESC)") {
-                    dismiss()
+    private var showsAerialMode: Bool {
+        filteredItems.contains { $0.kind == .aerial }
+    }
+
+    private func count(in collection: WallpaperCollection) -> Int {
+        items.lazy.filter { $0.collection == collection }.count
+    }
+
+    // MARK: - Sidebar
+
+    private var sidebar: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            searchField
+                .padding(.horizontal, 12)
+                .padding(.top, 16)
+                .padding(.bottom, 10)
+
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 14) {
+                    sidebarSection("macOS", collections.filter(Self.releaseCollections.contains))
+                    sidebarSection("Collections", collections.filter { !Self.releaseCollections.contains($0) })
                 }
-                .keyboardShortcut(.cancelAction)
+                .padding(.horizontal, 10)
+                .padding(.bottom, 16)
             }
+        }
+    }
 
-            ViewThatFits(in: .horizontal) {
-                // Wide layout
-                HStack(spacing: 12) {
-                    searchBarView
-                        .frame(maxWidth: 280)
+    @ViewBuilder
+    private func sidebarSection(_ title: String, _ entries: [WallpaperCollection]) -> some View {
+        if !entries.isEmpty {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(Design.font(11, weight: .semibold))
+                    .foregroundStyle(Design.inkTertiary)
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 4)
 
-                    Spacer(minLength: 0)
-
-                    SegmentedSwitch(options: Filter.allCases, selection: $filter) { $0.title }
-
-                    if filter == .aerials {
-                        SegmentedSwitch(options: AerialMode.allCases, selection: $aerialMode) { $0.title }
-                            .help("Apply aerials as looping video or still frame")
-                    }
-                }
-
-                // Narrow layout
-                VStack(alignment: .leading, spacing: 10) {
-                    searchBarView
-
-                    HStack(spacing: 8) {
-                        SegmentedSwitch(options: Filter.allCases, selection: $filter) { $0.title }
-
-                        if filter == .aerials {
-                            SegmentedSwitch(options: AerialMode.allCases, selection: $aerialMode) { $0.title }
-                        }
+                ForEach(entries) { collection in
+                    SidebarRow(
+                        title: collection.title,
+                        count: count(in: collection),
+                        isSelected: !isSearching && collection == activeCollection
+                    ) {
+                        searchText = ""
+                        selectedCollection = collection
                     }
                 }
             }
         }
-        .padding(.horizontal, 22)
-        .padding(.top, 18)
-        .padding(.bottom, 16)
     }
 
-    private var searchBarView: some View {
-        HStack(spacing: 8) {
+    private var searchField: some View {
+        HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 11))
+                .font(.system(size: 12))
                 .foregroundStyle(Design.inkTertiary)
-            TextField("SEARCH CATALOG…", text: $searchText)
+            TextField("Search", text: $searchText)
                 .textFieldStyle(.plain)
-                .font(Design.font(11, weight: .regular))
-                .foregroundStyle(Design.ink)
+                .font(Design.font(13))
             if !searchText.isEmpty {
                 Button {
                     searchText = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .foregroundStyle(Design.inkTertiary)
                 }
                 .buttonStyle(.plain)
-                .pointerOnHover()
+                .help("Clear search")
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .background(Design.surface, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .padding(.horizontal, 9)
+        .frame(height: 28)
+        .background(Design.well, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .strokeBorder(Design.hairline, lineWidth: 1)
         )
     }
 
+    // MARK: - Detail
+
+    private var detailTitle: String {
+        if isSearching { return "Results for “\(searchText)”" }
+        return activeCollection?.title ?? "Wallpapers"
+    }
+
+    private var detailHeader: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(detailTitle)
+                .font(Design.display(26))
+                .foregroundStyle(Design.ink)
+                .lineLimit(1)
+                .truncationMode(.tail)
+
+            if hasLoaded {
+                Text("\(filteredItems.count)")
+                    .font(Design.font(13))
+                    .foregroundStyle(Design.inkTertiary)
+                    .monospacedDigit()
+            }
+
+            Spacer(minLength: 12)
+
+            if showsAerialMode {
+                Picker("Aerials", selection: $aerialMode) {
+                    ForEach(AerialMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                .help("Live plays the aerial as a video. Still uses a single frame.")
+            }
+
+            Button {
+                dismiss()
+            } label: {
+                Text("Done").font(Design.font(13, weight: .medium))
+            }
+                .keyboardShortcut(.cancelAction)
+                .controlSize(.large)
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 18)
+        .padding(.bottom, 14)
+    }
+
     private var grid: some View {
         ScrollView {
-            LazyVGrid(columns: columns, spacing: 16) {
+            LazyVGrid(columns: columns, spacing: 22) {
                 ForEach(filteredItems) { item in
                     SystemWallpaperCellView(
                         item: item,
                         downloadFraction: downloadCenter.progress[item.id],
                         isCurrentDesktop: appliedTo(item, saved: WallpaperSwitcher.shared.savedDesktopURL),
                         isCurrentLock: appliedTo(item, saved: WallpaperSwitcher.shared.savedLoginURL),
-                        desktopChipLabel: item.kind == .aerial ? "DESKTOP · \(aerialMode.title)" : "DESKTOP",
-                        lockChipLabel: item.kind == .aerial ? "LOCK · \(aerialMode.title)" : "LOCK",
+                        aerialModeTitle: item.kind == .aerial ? aerialMode.title : nil,
                         onUseDesktop: { await use(item, for: .desktop) },
                         onUseLock: { await use(item, for: .login) }
                     )
                 }
             }
-            .padding(.horizontal, 22)
-            .padding(.bottom, 24)
+            .padding(.horizontal, 24)
+            .padding(.top, 4)
+            .padding(.bottom, 28)
+        }
+        .overlay {
+            if !hasLoaded {
+                ProgressView().controlSize(.small)
+            } else if filteredItems.isEmpty {
+                VStack(spacing: 6) {
+                    Image(systemName: isSearching ? "magnifyingglass" : "photo.on.rectangle")
+                        .font(.system(size: 26, weight: .light))
+                        .foregroundStyle(Design.inkTertiary)
+                    Text(isSearching ? "No wallpapers match “\(searchText)”" : "No wallpapers found on this Mac")
+                        .font(Design.font(13, weight: .medium))
+                        .foregroundStyle(Design.inkSecondary)
+                }
+            }
         }
     }
+
+    // MARK: - Data
 
     private func loadItemsFast() {
         Task.detached(priority: .userInitiated) {
@@ -210,6 +275,7 @@ struct SystemWallpaperBrowserView: View {
             await MainActor.run {
                 withAnimation(.easeOut(duration: 0.15)) {
                     self.items = loaded
+                    self.hasLoaded = true
                 }
             }
         }
@@ -268,7 +334,7 @@ struct SystemWallpaperBrowserView: View {
         do {
             let wasDownloaded = item.localContentURL != nil
             let contentURL = try await downloadCenter.ensureDownloaded(item)
-            
+
             // The item struct we hold is now stale: reload the catalog so the
             // downloaded badge appears without reopening the browser.
             withAnimation(.easeOut(duration: 0.15)) {
@@ -315,12 +381,12 @@ struct SystemWallpaperBrowserView: View {
                 }
             }
 
-            let targetName = target == .desktop ? "Desktop" : "Lock Screen"
+            let targetName = target == .desktop ? "desktop" : "lock screen"
             MenuBarManager.shared.reassertMainWindowIfVisible()
             if wasDownloaded {
-                presentToast("Applied to \(targetName)")
+                presentToast("Your \(targetName) is set")
             } else {
-                presentToast("Downloaded and applied to \(targetName)")
+                presentToast("Downloaded. Your \(targetName) is set")
             }
 
             NotificationCenter.default.post(name: .wallpsStateChanged, object: nil)
@@ -336,13 +402,50 @@ struct SystemWallpaperBrowserView: View {
     }
 }
 
+// MARK: - Sidebar Row
+
+private struct SidebarRow: View {
+    let title: String
+    let count: Int
+    let isSelected: Bool
+    let action: () -> Void
+
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Text(title)
+                    .font(Design.font(13, weight: isSelected ? .medium : .regular))
+                    .foregroundStyle(isSelected ? Color.white : Design.ink)
+                Spacer(minLength: 4)
+                Text("\(count)")
+                    .font(Design.font(11))
+                    .monospacedDigit()
+                    .foregroundStyle(isSelected ? Color.white.opacity(0.8) : Design.inkTertiary)
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 26)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(isSelected ? Color.accentColor : (hovering ? Design.well : Color.clear))
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+    }
+}
+
+// MARK: - Grid Cell
+
 private struct SystemWallpaperCellView: View {
     let item: SystemWallpaperItem
     let downloadFraction: Double?
     let isCurrentDesktop: Bool
     let isCurrentLock: Bool
-    var desktopChipLabel: String = "DESKTOP"
-    var lockChipLabel: String = "LOCK"
+    /// "Live" / "Still" for aerials; nil for pictures.
+    let aerialModeTitle: String?
     let onUseDesktop: () async -> Void
     let onUseLock: () async -> Void
 
@@ -353,25 +456,44 @@ private struct SystemWallpaperCellView: View {
     private var isBusy: Bool { downloadFraction != nil || applying }
     private var isActive: Bool { isCurrentDesktop || isCurrentLock }
 
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+    }
+
+    private var detail: String {
+        aerialModeTitle.map { "Aerial · \($0)" } ?? item.kind.title
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             thumbnail
-            HStack(spacing: 6) {
-                Text(item.name.uppercased())
-                    .font(Design.font(10, weight: .bold))
-                    .tracking(0.6)
-                    .foregroundStyle(hovering ? Design.ink : Design.inkSecondary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(item.name)
+                    .font(Design.font(12.5, weight: .medium))
+                    .foregroundStyle(Design.ink)
                     .lineLimit(1)
                     .truncationMode(.tail)
-                Spacer(minLength: 4)
-                if item.isDownloaded {
-                    StatusDot(filled: true, customColor: Design.success)
+                HStack(spacing: 4) {
+                    Text(detail)
+                    if !item.isDownloaded {
+                        Image(systemName: "icloud.and.arrow.down")
+                    }
                 }
+                .font(Design.font(11))
+                .foregroundStyle(Design.inkTertiary)
+                .lineLimit(1)
             }
+            .padding(.horizontal, 2)
         }
         .onHover { hovering = $0 }
-        .animation(.easeOut(duration: 0.12), value: hovering)
-        .help("\(item.name)\(item.isDownloaded ? "" : " — downloads on first use")")
+        .animation(.easeOut(duration: 0.15), value: hovering)
+        .help(item.isDownloaded ? item.name : "\(item.name). Downloads the first time you use it.")
+        .contextMenu {
+            Button("Set as Desktop") { perform(onUseDesktop) }
+                .disabled(isCurrentDesktop || isBusy)
+            Button("Set as Lock Screen") { perform(onUseLock) }
+                .disabled(isCurrentLock || isBusy)
+        }
         .task(id: item.id) {
             loadThumbnail()
         }
@@ -379,8 +501,7 @@ private struct SystemWallpaperCellView: View {
 
     private var thumbnail: some View {
         ZStack {
-            Rectangle()
-                .fill(Design.surface)
+            Design.well
 
             GeometryReader { geo in
                 if let image = thumbnailImage {
@@ -390,90 +511,98 @@ private struct SystemWallpaperCellView: View {
                         .frame(width: geo.size.width, height: geo.size.height)
                         .clipped()
                         .transition(.opacity)
-                } else if !isBusy {
-                    Image(systemName: "photo")
-                        .font(.system(size: 16, weight: .light))
-                        .foregroundStyle(Design.inkTertiary)
-                        .frame(width: geo.size.width, height: geo.size.height)
                 }
             }
-
-            LinearGradient(colors: [.clear, .black.opacity(0.5)], startPoint: .center, endPoint: .bottom)
 
             if isBusy {
-                VStack(spacing: 6) {
-                    if let fraction = downloadFraction {
-                        Text("DOWNLOADING \(Int(fraction * 100))%")
-                            .font(Design.font(9, weight: .bold))
-                            .tracking(1.0)
-                            .foregroundStyle(.white)
-                        ProgressView(value: fraction)
-                            .progressViewStyle(.linear)
-                            .tint(.white)
-                            .frame(maxWidth: 90)
-                    } else {
-                        Text("APPLYING…")
-                            .font(Design.font(9, weight: .bold))
-                            .tracking(1.0)
-                            .foregroundStyle(.white)
-                        ProgressView()
-                            .controlSize(.small)
-                            .tint(.white)
-                    }
-                }
+                busyOverlay
             } else {
-                HStack(spacing: 6) {
-                    chip(symbol: "macbook", label: desktopChipLabel, active: isCurrentDesktop) { perform(onUseDesktop) }
-                    chip(symbol: "lock.display", label: lockChipLabel, active: isCurrentLock) { perform(onUseLock) }
-                }
-                .opacity(hovering ? 1 : 0)
-                .scaleEffect(hovering ? 1 : 0.94)
+                if hovering {
+                    LinearGradient(colors: [.clear, .black.opacity(0.45)], startPoint: .center, endPoint: .bottom)
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
 
-                VStack {
-                    HStack {
-                        if item.kind == .aerial {
-                            Text("[ LIVE 4K ]")
-                                .font(Design.font(8, weight: .bold))
-                                .tracking(0.6)
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 3, style: .continuous))
-                        }
-                        Spacer()
-                        if !item.isDownloaded {
-                            Image(systemName: "arrow.down.circle")
-                                .font(.system(size: 10))
-                                .foregroundStyle(.white.opacity(0.9))
-                                .padding(4)
-                                .background(Color.black.opacity(0.75), in: Circle())
-                        }
+                    HStack(spacing: 6) {
+                        actionButton("Desktop", symbol: "menubar.dock.rectangle", applied: isCurrentDesktop, action: onUseDesktop)
+                        actionButton("Lock Screen", symbol: "lock", applied: isCurrentLock, action: onUseLock)
                     }
-                    Spacer()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .padding(8)
+                    .transition(.opacity)
                 }
-                .padding(6)
-                .opacity(hovering ? 0 : 1)
-            }
 
-            if isActive && !isBusy {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 13))
-                    .foregroundStyle(Color.black, Color.white)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                    .padding(6)
-                    .opacity(hovering ? 0 : 1)
+                if isActive && !hovering {
+                    appliedBadges
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        .padding(7)
+                }
             }
         }
-        .aspectRatio(16/10, contentMode: .fit)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .aspectRatio(16 / 10, contentMode: .fit)
+        .clipShape(shape)
         .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .strokeBorder(
-                    isActive ? Color.white.opacity(0.8) : (hovering ? Design.hairlineStrong : Design.hairline),
-                    lineWidth: isActive ? 1.5 : 1
-                )
+            shape.strokeBorder(
+                isActive ? Color.accentColor : (hovering ? Design.hairlineStrong : Design.hairline),
+                lineWidth: isActive ? 2 : 1
+            )
         )
-        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .shadow(color: .black.opacity(hovering ? 0.16 : 0.06), radius: hovering ? 10 : 4, y: hovering ? 4 : 2)
+        .contentShape(shape)
+    }
+
+    private var busyOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.45)
+            VStack(spacing: 8) {
+                if let fraction = downloadFraction {
+                    ProgressView(value: fraction)
+                        .progressViewStyle(.linear)
+                        .tint(.white)
+                        .frame(maxWidth: 110)
+                    Text("Downloading \(Int(fraction * 100))%")
+                        .monospacedDigit()
+                } else {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(.white)
+                    Text("Applying…")
+                }
+            }
+            .font(Design.font(11, weight: .medium))
+            .foregroundStyle(.white)
+        }
+    }
+
+    private var appliedBadges: some View {
+        HStack(spacing: 4) {
+            if isCurrentDesktop { badge("Desktop") }
+            if isCurrentLock { badge("Lock Screen") }
+        }
+    }
+
+    private func badge(_ text: String) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: "checkmark")
+                .font(.system(size: 8, weight: .bold))
+            Text(text)
+                .font(Design.font(10, weight: .semibold))
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(Color.accentColor, in: Capsule())
+        .shadow(color: .black.opacity(0.2), radius: 3, y: 1)
+    }
+
+    @ViewBuilder
+    private func actionButton(_ title: String, symbol: String, applied: Bool, action: @escaping () async -> Void) -> some View {
+        if applied {
+            OverlayButton(title: title, symbol: "checkmark") {}
+                .disabled(true)
+                .opacity(0.75)
+        } else {
+            OverlayButton(title: title, symbol: symbol) { perform(action) }
+        }
     }
 
     private func loadThumbnail() {
@@ -492,31 +621,5 @@ private struct SystemWallpaperCellView: View {
             await action()
             applying = false
         }
-    }
-
-    private func chip(symbol: String, label: String, active: Bool = false, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 4) {
-                Image(systemName: active ? "checkmark" : symbol)
-                    .font(.system(size: 8.5, weight: .bold))
-                Text(active ? "APPLIED" : label)
-                    .font(Design.font(9, weight: .bold))
-                    .tracking(0.6)
-            }
-            .foregroundStyle(active ? Design.accentInk : Color.white)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4.5)
-            .background(
-                active ? Design.accent : Color.black.opacity(0.8),
-                in: RoundedRectangle(cornerRadius: 4, style: .continuous)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .strokeBorder(active ? Color.clear : Color.white.opacity(0.25), lineWidth: 0.5)
-            )
-        }
-        .buttonStyle(.plain)
-        .pointerOnHover()
-        .disabled(active || isBusy)
     }
 }

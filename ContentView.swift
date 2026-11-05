@@ -14,17 +14,39 @@ enum ImportTarget {
         }
     }
 
-    var subtitle: String {
+    var symbol: String {
         switch self {
-        case .desktop: return "Active workspace background"
-        case .login: return "Lock screen background"
+        case .desktop: return "menubar.dock.rectangle"
+        case .login: return "lock"
+        }
+    }
+}
+
+/// What the footer tells the user about the current pair. One case at a time,
+/// derived from state, so the message and the Apply button never disagree.
+private enum SyncStatus {
+    case incomplete
+    case paused
+    case applying
+    case pending
+    case active
+
+    var message: String {
+        switch self {
+        case .incomplete: return "Pick a wallpaper for each screen"
+        case .paused: return "Paused. Your lock screen matches your desktop."
+        case .applying: return "Applying…"
+        case .pending: return "Ready to apply"
+        case .active: return "Active. Each screen keeps its own wallpaper."
         }
     }
 
-    var symbol: String {
+    var color: Color {
         switch self {
-        case .desktop: return "macbook"
-        case .login: return "lock.display"
+        case .incomplete, .applying: return Design.inkTertiary
+        case .paused: return Design.warning
+        case .pending: return Color.accentColor
+        case .active: return Design.success
         }
     }
 }
@@ -51,43 +73,21 @@ struct ContentView: View {
             VStack(spacing: 0) {
                 headerBar
 
-                GeometryReader { geo in
-                    ScrollView(showsIndicators: false) {
-                        VStack(spacing: 24) {
-                            displayStage(availableWidth: geo.size.width)
-
-                            // Centered Apply Button directly below wallpaper cards
-                            HStack {
-                                Spacer()
-                                PrimaryActionButton(
-                                    title: isApplying ? "Applying…" : (isPairApplied ? "Applied" : "Apply Wallpapers (⌘↵)"),
-                                    isLoading: isApplying,
-                                    keyEquivalent: isPairApplied ? nil : .return
-                                ) {
-                                    applyWallpapers()
-                                }
-                                .disabled(desktopImage == nil || loginImage == nil || isApplying || isPaused || isPairApplied)
-                                Spacer()
-                            }
-                            .padding(.top, 4)
-                        }
-                        .padding(.horizontal, 24)
-                        .padding(.top, 12)
-                        .padding(.bottom, 24)
-                        .frame(minHeight: geo.size.height, alignment: .center)
-                    }
+                HStack(alignment: .previewCenter, spacing: 14) {
+                    wallpaperViewport(target: .desktop, image: desktopImage)
+                    swapButton
+                    wallpaperViewport(target: .login, image: loginImage)
                 }
+                .padding(.horizontal, 28)
+                .frame(maxHeight: .infinity)
+
+                footerBar
             }
-            // Minimal Center-Top Toast Notification
+
             if let message = toastMessage {
                 WallpsToast(message: message)
                     .padding(.top, 12)
-                    .transition(
-                        .asymmetric(
-                            insertion: .move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.92)),
-                            removal: .move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.92))
-                        )
-                    )
+                    .transition(.move(edge: .top).combined(with: .opacity))
                     .zIndex(200)
                     .onTapGesture {
                         withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
@@ -96,37 +96,24 @@ struct ContentView: View {
                     }
             }
 
-            // Smooth Settings Dropdown Overlay
             if showingSettings {
-                Color.black.opacity(0.15)
+                Color.black.opacity(0.001)
                     .ignoresSafeArea()
                     .contentShape(Rectangle())
-                    .zIndex(0)
-                    .onTapGesture {
-                        withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
-                            showingSettings = false
-                        }
-                    }
+                    .zIndex(99)
+                    .onTapGesture { setSettingsVisible(false) }
 
-                VStack {
-                    HStack {
-                        Spacer()
-                        settingsCard
-                            .padding(.trailing, 20)
-                            .padding(.top, 54)
-                    }
+                HStack {
                     Spacer()
+                    settingsCard
+                        .padding(.trailing, 16)
+                        .padding(.top, 50)
                 }
-                .transition(
-                    .asymmetric(
-                        insertion: .opacity.combined(with: .scale(scale: 0.94, anchor: .topTrailing)),
-                        removal: .opacity.combined(with: .scale(scale: 0.94, anchor: .topTrailing))
-                    )
-                )
+                .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .topTrailing)))
                 .zIndex(100)
             }
         }
-        .frame(minWidth: 620, idealWidth: 720, minHeight: 460, idealHeight: 520)
+        .frame(minWidth: 640, idealWidth: 760, minHeight: 440, idealHeight: 500)
         .background {
             WindowChromeConfigurator()
                 .ignoresSafeArea()
@@ -145,6 +132,16 @@ struct ContentView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .setWallpapers)) { _ in
+            applyWallpapers()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openWallpaperBrowser)) { _ in
+            setSettingsVisible(false)
+            showingBrowser = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .swapWallpapers)) { _ in
+            // The menu swaps what is applied, not unsaved edits in the window.
+            syncCardsFromSwitcher()
+            swapWallpapers()
             applyWallpapers()
         }
         .onReceive(NotificationCenter.default.publisher(for: .refreshWallpaperPreviews)) { _ in
@@ -169,227 +166,250 @@ struct ContentView: View {
             )
         }
         .confirmationDialog(
-            "Allow Wallps to launch at login?",
+            "Open Wallps at login?",
             isPresented: $showingLoginPrompt,
             titleVisibility: .visible
         ) {
-            Button("Allow") {
+            Button("Open at Login") {
                 Task {
                     do {
                         try LoginItemManager.enable()
                     } catch {
                         launchAtLogin = false
                         alert = WallpaperService.AlertMessage(
-                            title: "Auto-start unavailable",
+                            title: "Couldn't turn on Launch at Login",
                             message: error.localizedDescription
                         )
                     }
                 }
             }
-            Button("Not now", role: .cancel) {
+            Button("Not Now", role: .cancel) {
                 launchAtLogin = false
             }
         } message: {
-            Text("Wallps starts silently at login and automatically keeps desktop and lock screen wallpapers synchronized.")
+            Text("Wallps starts quietly in the menu bar, so your lock screen keeps its own wallpaper after every restart.")
         }
         .onAppear {
             FontRegistrar.registerBundledFonts()
             MenuBarManager.shared.attachToMainWindowIfNeeded()
             isPaused = WallpaperSwitcher.shared.isPaused
+            launchAtLogin = LoginItemManager.isEnabled
+            hideDockIcon = DockIconManager.isHidden
             autoReapplySavedChoices()
         }
+    }
+
+    // MARK: - Header
+
+    /// No title: the two screens are the content. Actions sit on the trailing
+    /// edge, clear of the traffic lights.
+    private var headerBar: some View {
+        HStack(spacing: 8) {
+            Spacer()
+
+            ToolbarButton(
+                symbol: "photo.on.rectangle.angled",
+                title: "Browse",
+                help: "Browse Apple wallpapers and live aerials"
+            ) {
+                showingBrowser = true
+            }
+
+            ToolbarButton(
+                symbol: "gearshape",
+                help: "Settings",
+                isActive: showingSettings
+            ) {
+                setSettingsVisible(!showingSettings)
+            }
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 52)
+    }
+
+    // MARK: - Swap
+
+    private var swapButton: some View {
+        Button {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.82)) {
+                swapWallpapers()
+            }
+        } label: {
+            Image(systemName: "arrow.left.arrow.right")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Design.inkSecondary)
+                .frame(width: 30, height: 30)
+                .tintedGlassSurface(Circle())
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .pointerOnHover()
+        .disabled(desktopImage == nil && loginImage == nil)
+        .help("Swap the desktop and lock screen wallpapers")
+        .accessibilityLabel("Swap desktop and lock screen")
+        .alignmentGuide(.previewCenter) { $0[VerticalAlignment.center] }
+    }
+
+    /// Swaps the two selections. Like any edit, it takes effect on Apply.
+    private func swapWallpapers() {
+        (desktopImage, loginImage) = (loginImage, desktopImage)
+    }
+
+    // MARK: - Footer
+
+    private var footerBar: some View {
+        HStack(spacing: 12) {
+            HStack(spacing: 7) {
+                Circle()
+                    .fill(syncStatus.color)
+                    .frame(width: 7, height: 7)
+                Text(syncStatus.message)
+                    .font(Design.font(12))
+                    .foregroundStyle(Design.inkSecondary)
+                    .lineLimit(1)
+            }
+            .animation(.easeOut(duration: 0.15), value: syncStatus)
+
+            Spacer(minLength: 12)
+
+            if isApplying {
+                ProgressView()
+                    .controlSize(.small)
+            }
+
+            if isPaused {
+                Button {
+                    isPaused = false
+                    WallpaperSwitcher.shared.isPaused = false
+                    syncCardsFromSwitcher()
+                } label: {
+                    Text("Resume").font(Design.font(13, weight: .medium))
+                }
+                .controlSize(.large)
+            } else {
+                Button {
+                    applyWallpapers()
+                } label: {
+                    Text("Apply")
+                        .font(Design.font(13, weight: .semibold))
+                        .padding(.horizontal, 6)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .keyboardShortcut(.return, modifiers: [.command])
+                .disabled(syncStatus != .pending)
+                .help("Apply both wallpapers (⌘↩)")
+            }
+        }
+        .padding(.horizontal, 28)
+        .padding(.top, 8)
+        .padding(.bottom, 22)
+    }
+
+    private var syncStatus: SyncStatus {
+        if isApplying { return .applying }
+        if isPaused { return .paused }
+        guard desktopImage != nil, loginImage != nil else { return .incomplete }
+        return isPairApplied ? .active : .pending
+    }
+
+    // MARK: - Settings
+
+    private func setSettingsVisible(_ visible: Bool) {
+        withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+            showingSettings = visible
+        }
+    }
+
+    private var settingsCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            settingsRow(
+                "Launch at login",
+                detail: "Keeps everything working after a restart",
+                isOn: $launchAtLogin
+            )
+            .onChange(of: launchAtLogin) { enabled in
+                guard enabled else {
+                    Task { try? LoginItemManager.disable() }
+                    return
+                }
+                guard !LoginItemManager.isEnabled else { return }
+                showingLoginPrompt = true
+            }
+
+            Divider().padding(.vertical, 10)
+
+            settingsRow(
+                "Pause switching",
+                detail: "Your lock screen shows the desktop wallpaper",
+                isOn: $isPaused
+            )
+            .onChange(of: isPaused) { paused in
+                guard WallpaperSwitcher.shared.isPaused != paused else { return }
+                WallpaperSwitcher.shared.isPaused = paused
+                if !paused {
+                    syncCardsFromSwitcher()
+                }
+            }
+
+            Divider().padding(.vertical, 10)
+
+            settingsRow(
+                "Hide Dock icon",
+                detail: "Find Wallps in the menu bar instead",
+                isOn: $hideDockIcon
+            )
+            .onChange(of: hideDockIcon) { hidden in
+                DockIconManager.setHidden(hidden)
+                if hidden {
+                    DispatchQueue.main.async {
+                        MenuBarManager.shared.showMainWindow()
+                    }
+                }
+            }
+
+            Divider().padding(.vertical, 10)
+
+            Text("Version \(appVersion)")
+                .font(Design.font(11))
+                .foregroundStyle(Design.inkTertiary)
+        }
+        .padding(16)
+        .frame(width: 300)
+        .tintedGlassSurface(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .onTapGesture { }
+        .shadow(color: Color.black.opacity(0.18), radius: 18, y: 8)
+    }
+
+    private func settingsRow(_ title: String, detail: String, isOn: Binding<Bool>) -> some View {
+        Toggle(isOn: isOn) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(Design.font(13))
+                    .foregroundStyle(Design.ink)
+                Text(detail)
+                    .font(Design.font(11))
+                    .foregroundStyle(Design.inkSecondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .toggleStyle(.switch)
+        .controlSize(.small)
     }
 
     private var appVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.3"
     }
 
-    // MARK: - Header Bar (No Bottom Border, No Green Dot)
-
-    private var headerBar: some View {
-        HStack(spacing: 12) {
-            // App Title & Version (No green dot)
-            HStack(spacing: 6) {
-                Text("Wallps")
-                    .font(Design.font(14, weight: .bold))
-                    .foregroundStyle(Design.ink)
-
-                Text("v\(appVersion)")
-                    .font(Design.font(9.5, weight: .medium))
-                    .foregroundStyle(Design.inkTertiary)
-            }
-
-            Spacer()
-
-            // Header Actions
-            HStack(spacing: 8) {
-                GhostIconButton(
-                    symbol: "sparkles.rectangle.stack",
-                    text: "Apple Catalog",
-                    help: "Browse Apple system wallpapers & dynamic live aerials"
-                ) {
-                    showingBrowser = true
-                }
-
-                // Settings Toggle Button with Smooth Popover
-                Button {
-                    withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
-                        showingSettings.toggle()
-                    }
-                } label: {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 11.5, weight: .semibold))
-                        .foregroundStyle(showingSettings ? Design.ink : Design.inkSecondary)
-                        .frame(width: 28, height: 28)
-                        .tintedGlassSurface(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .pointerOnHover()
-            }
-        }
-        .padding(.horizontal, 24)
-        .frame(height: 50)
-    }
-
-    // MARK: - Settings Dropdown Card
-
-    private var settingsCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Text("PREFERENCES")
-                    .font(Design.font(9.5, weight: .bold))
-                    .tracking(1.4)
-                    .foregroundStyle(Design.inkTertiary)
-
-                Spacer()
-
-                Button {
-                    withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
-                        showingSettings = false
-                    }
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 9.5, weight: .bold))
-                        .foregroundStyle(Design.inkTertiary)
-                        .padding(4)
-                }
-                .buttonStyle(.plain)
-                .pointerOnHover()
-            }
-
-            VStack(spacing: 10) {
-                // Launch on boot
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Launch on boot")
-                            .font(Design.font(11, weight: .semibold))
-                            .foregroundStyle(Design.ink)
-                        Text("Starts silently in background")
-                            .font(Design.font(9.5, weight: .regular))
-                            .foregroundStyle(Design.inkTertiary)
-                    }
-                    Spacer(minLength: 16)
-                    Toggle("", isOn: $launchAtLogin)
-                        .labelsHidden()
-                        .toggleStyle(PillToggleStyle())
-                }
-                .onAppear { launchAtLogin = LoginItemManager.isEnabled }
-                .onChange(of: launchAtLogin) { enabled in
-                    guard enabled else {
-                        Task { try? LoginItemManager.disable() }
-                        return
-                    }
-                    guard !LoginItemManager.isEnabled else { return }
-                    showingLoginPrompt = true
-                }
-
-                Divider()
-                    .background(Design.hairline)
-
-                // Pause sync
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Pause sync")
-                            .font(Design.font(11, weight: .semibold))
-                            .foregroundStyle(Design.ink)
-                        Text("Temporarily suspend engine")
-                            .font(Design.font(9.5, weight: .regular))
-                            .foregroundStyle(Design.inkTertiary)
-                    }
-                    Spacer(minLength: 16)
-                    Toggle("", isOn: $isPaused)
-                        .labelsHidden()
-                        .toggleStyle(PillToggleStyle())
-                }
-                .onChange(of: isPaused) { paused in
-                    WallpaperSwitcher.shared.isPaused = paused
-                    if !paused {
-                        syncCardsFromSwitcher()
-                    }
-                }
-
-                Divider()
-                    .background(Design.hairline)
-
-                // Hide Dock icon
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Hide Dock icon")
-                            .font(Design.font(11, weight: .semibold))
-                            .foregroundStyle(Design.ink)
-                        Text("Keep Wallps out of the Dock")
-                            .font(Design.font(9.5, weight: .regular))
-                            .foregroundStyle(Design.inkTertiary)
-                    }
-                    Spacer(minLength: 16)
-                    Toggle("", isOn: $hideDockIcon)
-                        .labelsHidden()
-                        .toggleStyle(PillToggleStyle())
-                }
-                .onAppear { hideDockIcon = DockIconManager.isHidden }
-                .onChange(of: hideDockIcon) { hidden in
-                    DockIconManager.setHidden(hidden)
-                    if hidden {
-                        DispatchQueue.main.async {
-                            MenuBarManager.shared.showMainWindow()
-                        }
-                    }
-                }
-            }
-        }
-        .padding(16)
-        .frame(width: 270)
-        .tintedGlassSurface(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .onTapGesture { }
-        .shadow(color: Color.black.opacity(0.20), radius: 16, y: 8)
-    }
-
-    // MARK: - Display Stage (Responsive 2-Viewport Grid)
-
-    @ViewBuilder
-    private func displayStage(availableWidth: CGFloat) -> some View {
-        if availableWidth >= 520 {
-            HStack(spacing: 20) {
-                wallpaperViewport(target: .desktop, image: desktopImage)
-                    .frame(maxWidth: .infinity)
-
-                wallpaperViewport(target: .login, image: loginImage)
-                    .frame(maxWidth: .infinity)
-            }
-        } else {
-            VStack(spacing: 20) {
-                wallpaperViewport(target: .desktop, image: desktopImage)
-                wallpaperViewport(target: .login, image: loginImage)
-            }
-        }
-    }
+    // MARK: - Previews
 
     private func wallpaperViewport(target: ImportTarget, image: URL?) -> some View {
         WallpaperViewportView(
             target: target,
             url: image,
             onPick: { chooseImage(for: target) },
+            onBrowse: { showingBrowser = true },
             onAcceptImage: { url in
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                     switch target {
@@ -427,10 +447,9 @@ struct ContentView: View {
                 let liveLock = LoginSource.infer(for: loginImage) == .video(loginImage)
                 MenuBarManager.shared.reassertMainWindowIfVisible()
 
-                // Trigger Minimal Top Center Toast
                 toastTask?.cancel()
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
-                    toastMessage = liveLock ? "Live lock screen set" : "Wallpapers applied"
+                    toastMessage = liveLock ? "Your live lock screen is on" : "Both wallpapers are set"
                 }
                 toastTask = Task {
                     try? await Task.sleep(nanoseconds: 2_500_000_000)
@@ -440,7 +459,7 @@ struct ContentView: View {
                     }
                 }
             } catch {
-                alert = WallpaperService.AlertMessage(title: "Wallpaper setup failed", message: error.localizedDescription)
+                alert = WallpaperService.AlertMessage(title: "Couldn't apply your wallpapers", message: error.localizedDescription)
             }
             isApplying = false
         }
@@ -490,6 +509,10 @@ struct ContentView: View {
         }
 
         guard desktopIsValid, loginIsValid, let savedDesktop, let savedLogin else { return }
+        // AppDelegate already re-applied the saved pair at launch; doing it
+        // again here restarted the wallpaper services a second time (visible
+        // flicker / lock-screen reset). Only an explicit Refresh re-applies.
+        guard force || !WallpaperSwitcher.shared.hasReappliedAtLaunch else { return }
         Task {
             isApplying = true
             do {
@@ -504,12 +527,16 @@ struct ContentView: View {
     }
 }
 
-// MARK: - Modern Wallpaper Viewport
+// MARK: - Screen Preview
 
+/// One screen (desktop or lock screen) rendered as a miniature of the real
+/// thing, so the two are told apart at a glance: the desktop gets a menu bar
+/// and Dock, the lock screen gets the clock.
 private struct WallpaperViewportView: View {
     let target: ImportTarget
     let url: URL?
     let onPick: () -> Void
+    let onBrowse: () -> Void
     let onAcceptImage: (URL) -> Void
     let onClear: () -> Void
 
@@ -522,160 +549,125 @@ private struct WallpaperViewportView: View {
         ["mov", "mp4", "m4v"].contains(url?.pathExtension.lowercased() ?? "")
     }
 
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: Design.previewRadius, style: .continuous)
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            // Viewport Header
-            HStack(spacing: 8) {
-                Image(systemName: target.symbol)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Design.inkSecondary)
+        VStack(alignment: .leading, spacing: 14) {
+            preview
+                .alignmentGuide(.previewCenter) { $0[VerticalAlignment.center] }
+            caption
+        }
+        .frame(maxWidth: .infinity)
+    }
 
-                Text(target.title.uppercased())
-                    .font(Design.font(11, weight: .bold))
-                    .tracking(1.2)
-                    .foregroundStyle(Design.ink)
+    // MARK: Preview
 
-                if isVideo {
-                    Text("LIVE AERIAL")
-                        .font(Design.font(8.5, weight: .bold))
-                        .tracking(0.6)
-                        .foregroundStyle(Design.accentInk)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(Design.accent, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
-                }
-
-                Spacer()
-
-                if let url {
-                    Text(url.lastPathComponent)
-                        .font(Design.font(10, weight: .regular))
-                        .foregroundStyle(Design.inkTertiary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .frame(maxWidth: 140, alignment: .trailing)
-                }
-            }
-
-            // Display Frame (16:10 aspect ratio)
-            ZStack {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Design.surface)
-
+    private var preview: some View {
+        ZStack {
+            if url != nil {
                 GeometryReader { geo in
                     imageLayer(size: geo.size)
                 }
-
-                if dropping {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Design.accent.opacity(0.15))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .strokeBorder(Design.accent, lineWidth: 2)
-                        )
-                    VStack(spacing: 8) {
-                        Image(systemName: "arrow.down.circle.fill")
-                            .font(.system(size: 26, weight: .semibold))
-                            .foregroundStyle(Design.accentInk)
-                        Text("DROP TO SET \(target.title.uppercased())")
-                            .font(Design.font(11, weight: .bold))
-                            .tracking(1.2)
-                            .foregroundStyle(Design.accentInk)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color.black.opacity(0.35))
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .allowsHitTesting(false)
-                }
-
-                if url != nil {
-                    // Ambient gradient overlay for action buttons contrast
-                    LinearGradient(
-                        colors: [
-                            Color.clear,
-                            Color.black.opacity(0.45)
-                        ],
-                        startPoint: .center,
-                        endPoint: .bottom
-                    )
+                screenChrome
                     .allowsHitTesting(false)
 
-                    // Floating Glass Actions Bar
-                    VStack {
-                        Spacer()
-                        HStack(spacing: 8) {
-                            Button(action: onClear) {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "xmark")
-                                        .font(.system(size: 9, weight: .bold))
-                                    Text("CLEAR")
-                                        .font(Design.font(9.5, weight: .bold))
-                                        .tracking(0.6)
-                                }
-                                .foregroundStyle(Color.white)
-                                .padding(.horizontal, 9)
-                                .padding(.vertical, 5)
-                                .glassSurface(RoundedRectangle(cornerRadius: 5, style: .continuous))
-                            }
-                            .buttonStyle(.plain)
-                            .pointerOnHover()
-
-                            Spacer()
-
-                            Button(action: onPick) {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "photo")
-                                        .font(.system(size: 9, weight: .bold))
-                                    Text("CHANGE")
-                                        .font(Design.font(9.5, weight: .bold))
-                                        .tracking(0.6)
-                                }
-                                .foregroundStyle(Color.white)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
-                                .glassSurface(RoundedRectangle(cornerRadius: 5, style: .continuous))
-                            }
-                            .buttonStyle(.plain)
-                            .pointerOnHover()
-                        }
-                        .padding(10)
-                    }
-                }
+                OverlayButton(title: "Change", symbol: "photo", action: onPick)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                    .padding(10)
+                    .opacity(hovering && !dropping ? 1 : 0)
+            } else {
+                emptyState
             }
-            .aspectRatio(16/10, contentMode: .fit)
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(
-                        dropping ? Design.accent : (hovering ? Design.hairlineStrong : Design.hairline),
-                        lineWidth: dropping ? 2 : 1
-                    )
-            )
-            .shadow(color: Color.black.opacity(0.08), radius: 8, y: 3)
-            .onHover { hovering = $0 }
-            .animation(.easeOut(duration: 0.12), value: hovering)
-            .onDrop(
-                of: [.fileURL, .image, .movie, .heic],
-                isTargeted: $dropping
-            ) { providers in
-                guard let provider = providers.first else { return false }
-                Task {
-                    if let url = await Self.resolveDroppedFile(provider) {
-                        await MainActor.run { onAcceptImage(url) }
-                    }
-                }
-                return true
-            }
-            .task(id: url) {
-                await reloadPreview()
+
+            if dropping {
+                dropOverlay
             }
         }
-        .padding(14)
-        .background(Design.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .aspectRatio(16 / 10, contentMode: .fit)
+        .clipShape(shape)
         .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Design.hairline, lineWidth: 1)
+            shape.strokeBorder(
+                dropping ? Color.accentColor : Design.hairline,
+                lineWidth: dropping ? 2 : 1
+            )
         )
+        .shadow(color: Color.black.opacity(url == nil ? 0 : 0.14), radius: 14, y: 6)
+        .onHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.15), value: hovering)
+        .animation(.easeOut(duration: 0.15), value: dropping)
+        .contextMenu { actions }
+        .onDrop(
+            of: [.fileURL, .image, .movie, .heic],
+            isTargeted: $dropping
+        ) { providers in
+            guard let provider = providers.first else { return false }
+            Task {
+                if let url = await Self.resolveDroppedFile(provider) {
+                    await MainActor.run { onAcceptImage(url) }
+                }
+            }
+            return true
+        }
+        .task(id: url) {
+            await reloadPreview()
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(target.title) wallpaper")
+    }
+
+    @ViewBuilder
+    private var screenChrome: some View {
+        switch target {
+        case .desktop:
+            DesktopChrome()
+        case .login:
+            LockScreenChrome()
+        }
+    }
+
+    private var dropOverlay: some View {
+        ZStack {
+            Color.accentColor.opacity(0.18)
+            VStack(spacing: 6) {
+                Image(systemName: "arrow.down.circle.fill")
+                    .font(.system(size: 24, weight: .medium))
+                Text("Drop to use as \(target.title)")
+                    .font(Design.font(12, weight: .semibold))
+            }
+            .foregroundStyle(Color.accentColor)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .tintedGlassSurface(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .allowsHitTesting(false)
+    }
+
+    private var emptyState: some View {
+        Button(action: onPick) {
+            VStack(spacing: 8) {
+                Image(systemName: "photo.badge.plus")
+                    .font(.system(size: 24, weight: .light))
+                    .foregroundStyle(Design.inkSecondary)
+                Text("Choose an image or video")
+                    .font(Design.font(12.5, weight: .medium))
+                    .foregroundStyle(Design.ink)
+                Text("or drag one here")
+                    .font(Design.font(11))
+                    .foregroundStyle(Design.inkTertiary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(hovering ? Design.hairline : Design.well)
+            .overlay(
+                shape
+                    .inset(by: 6)
+                    .strokeBorder(Design.hairlineStrong, style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+            )
+            .contentShape(shape)
+        }
+        .buttonStyle(.plain)
+        .pointerOnHover()
     }
 
     @ViewBuilder
@@ -689,10 +681,11 @@ private struct WallpaperViewportView: View {
                         .frame(width: size.width, height: size.height)
                         .clipped()
                 } else {
-                    ProgressView()
-                        .controlSize(.small)
-                        .tint(Design.inkTertiary)
-                        .frame(width: size.width, height: size.height)
+                    ZStack {
+                        Design.well
+                        ProgressView().controlSize(.small)
+                    }
+                    .frame(width: size.width, height: size.height)
                 }
             } else if let image = WallpaperImageStore.cachedImage(for: url) {
                 Image(nsImage: image)
@@ -701,40 +694,73 @@ private struct WallpaperViewportView: View {
                     .frame(width: size.width, height: size.height)
                     .clipped()
             } else {
-                emptyState
+                Design.well
+                    .frame(width: size.width, height: size.height)
             }
-        } else {
-            emptyState
         }
     }
 
-    private var emptyState: some View {
-        Button(action: onPick) {
-            VStack(spacing: 10) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Design.surfaceRaised)
-                        .frame(width: 36, height: 36)
-                    Image(systemName: "plus")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(Design.inkSecondary)
-                }
+    // MARK: Caption
 
-                VStack(spacing: 3) {
-                    Text("Select \(target.title)")
-                        .font(Design.font(11.5, weight: .bold))
+    private var caption: some View {
+        HStack(alignment: .center, spacing: 8) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 7) {
+                    Text(target.title)
+                        .font(Design.display(18))
                         .foregroundStyle(Design.ink)
-
-                    Text("Drop image or video, or click to choose")
-                        .font(Design.font(9.5, weight: .regular))
-                        .foregroundStyle(Design.inkTertiary)
+                    if isVideo {
+                        Text("Live")
+                            .font(Design.font(10, weight: .semibold))
+                            .foregroundStyle(Color.accentColor)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 1.5)
+                            .background(Color.accentColor.opacity(0.14), in: Capsule())
+                    }
                 }
+                Text(url.map(Self.displayName) ?? "Nothing chosen yet")
+                    .font(Design.font(11.5))
+                    .foregroundStyle(Design.inkSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(url?.path ?? "")
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Design.surface)
+
+            Spacer(minLength: 0)
+
+            Menu {
+                actions
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(Design.inkTertiary)
+                    .frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("More options")
         }
-        .buttonStyle(.plain)
-        .pointerOnHover()
+        .padding(.horizontal, 2)
+    }
+
+    @ViewBuilder
+    private var actions: some View {
+        Button("Choose File…", action: onPick)
+        Button("Browse Apple Wallpapers…", action: onBrowse)
+        if let url {
+            Divider()
+            Button("Show in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            }
+            Button("Remove", role: .destructive, action: onClear)
+        }
+    }
+
+    /// File name without extension; Apple's catalog files are already named.
+    private static func displayName(_ url: URL) -> String {
+        url.deletingPathExtension().lastPathComponent
     }
 
     private func reloadPreview() async {
@@ -808,6 +834,75 @@ private struct WallpaperViewportView: View {
             return url
         } catch {
             return nil
+        }
+    }
+}
+
+extension VerticalAlignment {
+    /// Vertical centre of the screen previews, so the swap button sits
+    /// between the images rather than between image-plus-caption blocks.
+    private enum PreviewCenter: AlignmentID {
+        static func defaultValue(in context: ViewDimensions) -> CGFloat {
+            context[VerticalAlignment.center]
+        }
+    }
+
+    static let previewCenter = VerticalAlignment(PreviewCenter.self)
+}
+
+/// Miniature menu bar and Dock drawn over the desktop preview.
+private struct DesktopChrome: View {
+    var body: some View {
+        GeometryReader { geo in
+            let barHeight = max(6, geo.size.height * 0.045)
+            VStack(spacing: 0) {
+                Rectangle()
+                    .fill(Color.white.opacity(0.22))
+                    .frame(height: barHeight)
+                    .overlay(alignment: .leading) {
+                        HStack(spacing: barHeight * 0.8) {
+                            Image(systemName: "applelogo")
+                            ForEach(0..<4, id: \.self) { _ in
+                                Capsule().frame(width: barHeight * 2.2, height: barHeight * 0.3)
+                            }
+                        }
+                        .font(.system(size: barHeight * 0.6))
+                        .foregroundStyle(.white.opacity(0.85))
+                        .padding(.leading, barHeight)
+                    }
+
+                Spacer()
+
+                RoundedRectangle(cornerRadius: barHeight * 0.8, style: .continuous)
+                    .fill(Color.white.opacity(0.24))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: barHeight * 0.8, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.3), lineWidth: 0.5)
+                    )
+                    .frame(width: geo.size.width * 0.42, height: barHeight * 2.4)
+                    .padding(.bottom, barHeight * 0.7)
+            }
+        }
+    }
+}
+
+/// Lock-screen clock drawn over the lock screen preview, kept to the minute.
+private struct LockScreenChrome: View {
+    var body: some View {
+        GeometryReader { geo in
+            TimelineView(.everyMinute) { context in
+                VStack(spacing: 0) {
+                    Text(context.date, format: .dateTime.weekday(.wide).month(.wide).day())
+                        .font(Design.font(geo.size.height * 0.055, weight: .medium))
+                    Text(context.date, format: .dateTime.hour().minute())
+                        .font(Design.display(geo.size.height * 0.24))
+                        .monospacedDigit()
+                }
+                .foregroundStyle(.white.opacity(0.92))
+                .shadow(color: .black.opacity(0.25), radius: 6, y: 1)
+                .frame(maxWidth: .infinity)
+                .padding(.top, geo.size.height * 0.09)
+            }
         }
     }
 }

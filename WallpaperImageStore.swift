@@ -39,7 +39,12 @@ enum WallpaperImageStore {
             if let image {
                 let cost = Int(image.size.width * image.size.height * 4)
                 cache.setObject(image, forKey: key as NSString, cost: cost)
-                cache.setObject(image, forKey: url.path as NSString, cost: cost)
+                // The size-less key feeds UI previews; don't let a tiny grid
+                // thumbnail replace a sharper preview that's already cached.
+                let existing = cache.object(forKey: url.path as NSString)
+                if existing.map({ $0.size.width < image.size.width }) ?? true {
+                    cache.setObject(image, forKey: url.path as NSString, cost: cost)
+                }
             }
             lock.lock()
             let waiters = inflight.removeValue(forKey: key) ?? []

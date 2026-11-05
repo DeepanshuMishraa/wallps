@@ -63,16 +63,25 @@ final class DesktopCanvas {
     private var looper: AVPlayerLooper?
     private var windowsByDisplay: [UInt32: NSWindow] = [:]
     private var screenObserver: NSObjectProtocol?
+    private var generation = 0
 
     func show(source: DesktopSource) {
         detachObserver()
         stopPlayback()
         removeAllWindows()
+        generation += 1
+        let requested = generation
 
         switch source {
         case .image(let url):
-            WallpaperImageStore.load(url) { [weak self] loadedImage in
-                guard let self, let loadedImage else { return }
+            // Decode at the largest attached display's native pixel size; the
+            // store's 1800px default made the desktop blurry on Retina/5K.
+            let screenPixels = NSScreen.screens
+                .map { max($0.frame.width, $0.frame.height) * $0.backingScaleFactor }
+                .max() ?? 1800
+            WallpaperImageStore.load(url, maxPixelSize: Int(max(screenPixels, 1800))) { [weak self] loadedImage in
+                // Ignore decodes that finish after a newer show()/tearDown().
+                guard let self, let loadedImage, self.generation == requested else { return }
                 self.content = source
                 self.image = loadedImage
                 self.reconcile()
@@ -101,6 +110,7 @@ final class DesktopCanvas {
     }
 
     func tearDown() {
+        generation += 1
         detachObserver()
         content = nil
         image = nil

@@ -106,15 +106,26 @@ final class WallpaperSwitcher {
         guard !didReapplyAtLaunch else { return }
         didReapplyAtLaunch = true
         guard !isPaused else { return }
-        guard hasValidChoices, let login = loginSource else { return }
+        guard let login = loginSource,
+              let desktop = desktopSource,
+              FileManager.default.fileExists(atPath: desktop.url.path) else { return }
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            Task {
+            Task { @MainActor in
                 switch login {
                 case .image(let url):
+                    guard FileManager.default.fileExists(atPath: url.path) else { return }
                     _ = try? await WallpaperService.apply(login: url, legacyInstall: false)
                 case .video(let url):
-                    try? await LiveWallpaperManager.shared.reactivateAerial(for: url)
+                    do {
+                        if let active = try await LiveWallpaperManager.shared.reactivateAerial(for: url),
+                           active != url {
+                            self.arm(desktop: desktop, login: .video(active))
+                            return
+                        }
+                    } catch {
+                        NSLog("Wallps: could not restore live lock screen \(url.path): \(error)")
+                    }
                 }
                 self.applyState()
             }
@@ -251,9 +262,16 @@ final class WallpaperSwitcher {
     }
 
     private var hasValidChoices: Bool {
-        guard let desktop = desktopSource, let login = loginImageURL else { return false }
-        return FileManager.default.fileExists(atPath: desktop.url.path)
-            && FileManager.default.fileExists(atPath: login.path)
+        guard let desktop = desktopSource, let login = loginSource else { return false }
+        guard FileManager.default.fileExists(atPath: desktop.url.path) else { return false }
+        switch login {
+        case .image(let url):
+            return FileManager.default.fileExists(atPath: url.path)
+        case .video:
+            // The live lock is owned by the wallpaper store, not held here; a
+            // missing aerial file must not stop the desktop from being shown.
+            return true
+        }
     }
 
     @MainActor
@@ -353,7 +371,7 @@ enum WallpaperSwitcherError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .paused:
-            return "Wallps is paused. Turn protection back on to manage wallpapers."
+            return "Wallps is paused. Turn off Pause Switching, then try again."
         case .missingLockImage:
             return "Choose a lock-screen image first, then try again."
         case .missingDesktopImage:

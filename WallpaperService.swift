@@ -16,7 +16,7 @@ enum WallpaperService {
             try installLegacyLoginImage(login)
             return "Wallpapers set. Log out or restart to see the boot login screen."
         }
-        return "Done. Lock your screen (⌃⌘Q) — your lock image appears instantly."
+        return "Done. Lock your Mac (⌃⌘Q) to see your lock screen wallpaper."
     }
 
     static func currentLoginImageURL() -> URL? {

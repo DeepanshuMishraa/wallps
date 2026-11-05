@@ -273,7 +273,7 @@ enum TemporalTranscodeError: LocalizedError {
         case .writerFailed:
             return "Writing the transcoded movie failed."
         case .nothingWritten:
-            return "No frames were written — the video may be empty or unsupported."
+            return "No frames were written. The video may be empty or in a format macOS can't read. Try another file."
         }
     }
 }
