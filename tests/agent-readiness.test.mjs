@@ -39,17 +39,17 @@ assert.match(llms, /macOS 13/);
 
 const sitemap = read("sitemap.xml");
 assert.match(sitemap, /<urlset[^>]+xmlns="http:\/\/www\.sitemaps\.org\/schemas\/sitemap\/0\.9"/);
-for (const url of ["/wallps/", "/wallps/about/", "/wallps/contact/", "/wallps/privacy/"]) {
+for (const url of ["/wallps/", "/wallps/changelog/", "/wallps/about/", "/wallps/contact/", "/wallps/privacy/"]) {
   assert.match(sitemap, new RegExp(`<loc>https:\/\/deepanshumishraa\.github\.io${url.replaceAll("/", "\\/")}<\\/loc>`));
 }
-assert.equal((sitemap.match(/<lastmod>/g) ?? []).length, 4);
+assert.equal((sitemap.match(/<lastmod>/g) ?? []).length, 5);
 
 const notFound = read("404.html");
 assert.match(notFound, /# Page not found/);
 assert.match(notFound, /sitemap\.xml/);
 assert.match(notFound, /llms\.txt/);
 
-for (const page of ["about/index.html", "contact/index.html", "privacy/index.html"]) {
+for (const page of ["changelog/index.html", "about/index.html", "contact/index.html", "privacy/index.html"]) {
   const html = read(page);
   const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
   assert.match(html, /<h1\b[^>]*>/i, `${page} has an H1`);
@@ -59,6 +59,7 @@ for (const page of ["about/index.html", "contact/index.html", "privacy/index.htm
 
 for (const [endpoint, file] of Object.entries({
   "/": "index.html",
+  "/changelog/": "changelog/index.html",
   "/about/": "about/index.html",
   "/contact/": "contact/index.html",
   "/privacy/": "privacy/index.html",
