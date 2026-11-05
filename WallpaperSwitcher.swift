@@ -33,7 +33,10 @@ final class WallpaperSwitcher {
     private var reconcileTimer: Timer?
     private var workspaceObservers: [NSObjectProtocol] = []
     private var didReapplyAtLaunch = false
-    private let launchDate = Date()
+    /// Wallpaper differences before this moment are the OS settling (login,
+    /// or the services restarting after an apply), not a user's pick in
+    /// System Settings, so they are never adopted.
+    private var settlesAt = Date().addingTimeInterval(15)
 
     var hasReappliedAtLaunch: Bool { didReapplyAtLaunch }
 
@@ -61,7 +64,10 @@ final class WallpaperSwitcher {
         defaults.set(desktop.kindString, forKey: "WallpsDesktopSourceKind")
         defaults.set(login.url.path, forKey: "WallpsLoginImagePath")
         defaults.set(login.kindString, forKey: "WallpsLoginSourceKind")
+        settlesAt = Date().addingTimeInterval(15)
+        clearPendingAdoption()
         applyState()
+        scheduleCatchUpSweeps()
         postStateChanged()
     }
 
@@ -198,16 +204,22 @@ final class WallpaperSwitcher {
                 continue
             }
 
+            // macOS reports this placeholder when the system wallpaper is not
+            // a plain image (an aerial left over from a live lock screen, or
+            // the default after the services restart). The lock image was
+            // dropped: put it back instead of adopting the placeholder.
+            if let current, Self.isSystemPlaceholder(current) {
+                setSystemWallpaperTracked(login, screens: [screen])
+                continue
+            }
+
             if externalCandidate == nil {
                 externalCandidate = current
             }
         }
 
         if let candidate = externalCandidate {
-            // Right after launch (login) the OS re-applies its own wallpaper.
-            // Any difference inside this window is system settling, not a
-            // deliberate user change in System Settings — do not adopt it.
-            guard Date().timeIntervalSince(launchDate) > 15 else { return }
+            guard Date() >= settlesAt else { return }
             if candidate != pendingAdoptionURL {
                 pendingAdoptionURL = candidate
                 pendingAdoptionSince = Date()
@@ -234,6 +246,10 @@ final class WallpaperSwitcher {
     /// A wallpaper picked in System Settings becomes the visible desktop
     /// content; the lock-screen image stays armed underneath as system
     /// wallpaper so the lock screen keeps working.
+    private static func isSystemPlaceholder(_ url: URL) -> Bool {
+        url.standardizedFileURL.path == "/System/Library/CoreServices/DefaultDesktop.heic"
+    }
+
     private func adoptExternalChange(url: URL, login: URL) {
         let source = DesktopSource.infer(for: url)
         switch source {
@@ -348,9 +364,10 @@ final class WallpaperSwitcher {
         }
     }
 
-    /// Displays re-enumerate in stages after a wake; sweep several times so
-    /// late-arriving screens get covered without user action.
-    private func scheduleCatchUpSweeps() {
+    /// Displays re-enumerate in stages after a wake, and the wallpaper
+    /// services take a few seconds to come back after an apply restarts them;
+    /// sweep several times so coverage and the lock image recover on their own.
+    func scheduleCatchUpSweeps() {
         for delay in [0.5, 2.0, 5.0] {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
                 self?.reconcile()

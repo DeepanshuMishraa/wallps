@@ -66,9 +66,6 @@ final class DesktopCanvas {
     private var generation = 0
 
     func show(source: DesktopSource) {
-        detachObserver()
-        stopPlayback()
-        removeAllWindows()
         generation += 1
         let requested = generation
 
@@ -79,15 +76,21 @@ final class DesktopCanvas {
             let screenPixels = NSScreen.screens
                 .map { max($0.frame.width, $0.frame.height) * $0.backingScaleFactor }
                 .max() ?? 1800
+            // The current windows stay up until the new image has decoded, so
+            // the system wallpaper never flashes through between the two.
             WallpaperImageStore.load(url, maxPixelSize: Int(max(screenPixels, 1800))) { [weak self] loadedImage in
                 // Ignore decodes that finish after a newer show()/tearDown().
                 guard let self, let loadedImage, self.generation == requested else { return }
+                self.stopPlayback()
+                self.removeAllWindows()
                 self.content = source
                 self.image = loadedImage
                 self.reconcile()
                 self.attachObserver()
             }
         case .video(let url):
+            stopPlayback()
+            removeAllWindows()
             let item = AVPlayerItem(url: url)
             let queuePlayer = AVQueuePlayer()
             queuePlayer.isMuted = true
@@ -150,6 +153,9 @@ final class DesktopCanvas {
                 if existing.frame != screen.frame {
                     existing.setFrame(screen.frame, display: false)
                 }
+                // A restarted wallpaper service orders its own desktop-level
+                // window above ours; take the front of the level back.
+                existing.orderFrontRegardless()
             } else {
                 let window = makeWindow(screen: screen)
                 window.orderFrontRegardless()

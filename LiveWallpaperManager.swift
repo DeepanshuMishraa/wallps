@@ -97,55 +97,79 @@ final class LiveWallpaperManager {
         let destination = videosDir.appendingPathComponent("\(assetID).mov")
         let thumbnailURL = thumbnailsDir.appendingPathComponent("\(assetID).png")
 
-        // Fast path 1: the exact same source file was registered before.
+        // Fast path: the exact same source file was registered before.
         if let cached = registeredRegistration(for: videoURL) {
-            return try useExistingRegistration(cached, thumbnailURL: thumbnailURL)
+            let activated = try useExistingRegistration(cached)
+            upgradeInBackgroundIfNeeded(assetID: cached.assetID, source: videoURL, aerial: activated)
+            return activated
         }
 
-        // Fast path 2: the clip already carries temporal scalability — a plain
-        // copy is enough, no re-encode.
-        let needsTranscode = !TemporalTranscoder.hasTemporalScalability(at: videoURL)
-
-        // The thumbnail comes from the ORIGINAL clip, so it can be generated
-        // while the (possibly slow) transcode runs.
-        let thumbnailTask: Task<Void, Never>? = fileManager.fileExists(atPath: thumbnailURL.path)
-            ? nil
-            : Task.detached(priority: .utility) { [weak self] in
-                self?.generateThumbnail(from: videoURL, to: thumbnailURL)
-            }
-
-        if needsTranscode {
-            if fileManager.fileExists(atPath: destination.path) {
-                try fileManager.removeItem(at: destination)
-            }
-            try await Task.detached(priority: .userInitiated) {
-                try TemporalTranscoder.transcode(input: videoURL, output: destination)
-            }.value
-        } else {
-            if !fileManager.fileExists(atPath: destination.path) {
-                try fileManager.copyItem(at: videoURL, to: destination)
-            }
+        // A 4K transcode takes 15–30 s even on hardware encoders, so the clip
+        // is activated right away as an APFS clone of the original (instant)
+        // and upgraded to the temporal-scalability encode in the background.
+        guard try await AVURLAsset(url: videoURL).load(.isPlayable) else {
+            throw LiveWallpaperError.unplayable
         }
-        if let thumbnailTask {
-            await thumbnailTask.value
-        }
-
+        try fileManager.copyItem(at: videoURL, to: destination)
+        generateThumbnail(from: videoURL, to: thumbnailURL)
         insertIntoManifest(assetID: assetID, videoURL: destination, thumbnailURL: thumbnailURL, name: name)
         rememberRegistration(source: videoURL, assetID: assetID, name: name)
         try activateAerial(assetID: assetID)
+        upgradeInBackgroundIfNeeded(assetID: assetID, source: videoURL, aerial: destination)
         return destination
     }
 
-    private func useExistingRegistration(
-        _ entry: RegisteredAerial,
-        thumbnailURL: URL
-    ) throws -> URL {
-        if !fileManager.fileExists(atPath: thumbnailURL.path) {
-            generateThumbnail(from: entry.videoURL, to: thumbnailURL)
-        }
+    private func useExistingRegistration(_ entry: RegisteredAerial) throws -> URL {
+        let thumbnailURL = thumbnailsDir.appendingPathComponent("\(entry.assetID).png")
+        makeThumbnailIfNeeded(videoURL: entry.videoURL, outputURL: thumbnailURL)
         insertIntoManifest(assetID: entry.assetID, videoURL: entry.videoURL, thumbnailURL: thumbnailURL, name: entry.name)
         try activateAerial(assetID: entry.assetID)
         return entry.videoURL
+    }
+
+    // MARK: - Background upgrade
+
+    private let upgradeLock = NSLock()
+    private var upgradesInFlight: Set<String> = []
+
+    /// Re-encodes `aerial` with Apple's temporal sub-layers when it lacks them
+    /// (without them the lock screen freezes after the first unlock), swaps
+    /// the result in place and reloads the wallpaper services if that aerial
+    /// is still the armed lock screen. The playing clone stays put on failure.
+    private func upgradeInBackgroundIfNeeded(assetID: String, source: URL, aerial: URL) {
+        upgradeLock.lock()
+        let isNew = upgradesInFlight.insert(assetID).inserted
+        upgradeLock.unlock()
+        guard isNew else { return }
+
+        Task.detached(priority: .utility) { [weak self] in
+            guard let self else { return }
+            defer {
+                self.upgradeLock.lock()
+                self.upgradesInFlight.remove(assetID)
+                self.upgradeLock.unlock()
+            }
+            guard !TemporalTranscoder.hasTemporalScalability(at: aerial) else { return }
+            let staging = aerial.deletingLastPathComponent()
+                .appendingPathComponent(".\(assetID).transcoding.mov")
+            do {
+                try TemporalTranscoder.transcode(input: source, output: staging)
+                _ = try self.fileManager.replaceItemAt(aerial, withItemAt: staging)
+            } catch {
+                try? self.fileManager.removeItem(at: staging)
+                NSLog("Wallps: background transcode of \(source.path) for aerial \(assetID) failed; the untranscoded copy stays active and may pause after the first unlock: \(error)")
+                return
+            }
+            self.rememberRegistration(source: source, assetID: assetID, name: self.registeredName(forAssetID: assetID))
+            await MainActor.run {
+                let switcher = WallpaperSwitcher.shared
+                guard !switcher.isPaused,
+                      case .video(let armed)? = switcher.savedLoginSource,
+                      armed.standardizedFileURL == aerial.standardizedFileURL else { return }
+                try? self.activateAerial(assetID: assetID)
+                switcher.scheduleCatchUpSweeps()
+            }
+        }
     }
 
     private struct RegisteredAerial {
@@ -201,6 +225,10 @@ final class LiveWallpaperManager {
         guard fileManager.fileExists(atPath: existing.path) else {
             guard let source = recoverableSource(forAssetID: assetID) else { return nil }
             return try await setLiveLockScreen(videoURL: source)
+        }
+        // An app quit mid-upgrade leaves the untranscoded clone active.
+        if let source = recoverableSource(forAssetID: assetID) {
+            upgradeInBackgroundIfNeeded(assetID: assetID, source: source, aerial: existing)
         }
 
         if !manifestContainsAsset(assetID) {
@@ -486,9 +514,12 @@ final class LiveWallpaperManager {
 enum LiveWallpaperError: LocalizedError {
     case requiresTahoe
     case fileMissing
+    case unplayable
 
     var errorDescription: String? {
         switch self {
+        case .unplayable:
+            return "macOS can't play this video's format on this Mac, so it can't be a live lock screen. Your current wallpapers are unchanged. Try an H.264 or HEVC (.mov/.mp4) file."
         case .requiresTahoe:
             return "Live lock-screen wallpapers require macOS 26 (Tahoe). On earlier macOS versions, the wallpaper catalog lives in a system (admin-only) folder."
         case .fileMissing:
